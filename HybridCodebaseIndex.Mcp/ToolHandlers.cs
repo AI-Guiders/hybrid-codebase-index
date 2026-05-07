@@ -233,7 +233,7 @@ internal static class ToolHandlers
             var (resp, err) = Service.SearchAsync(ws, sln, id, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
             if (!string.IsNullOrEmpty(err))
             {
-                results.Add(new VerifyItemDto(id, Exists: false, Err: err, Hits: [], Suggestions: []));
+                results.Add(new VerifyItemDto(id, Exists: false, MatchKind: "strict", Segment: null, Err: err, Hits: [], Suggestions: []));
                 continue;
             }
 
@@ -244,13 +244,28 @@ internal static class ToolHandlers
 
             if (hits.Count > 0)
             {
-                results.Add(new VerifyItemDto(id, Exists: true, Err: null, Hits: hits, Suggestions: []));
+                results.Add(new VerifyItemDto(id, Exists: true, MatchKind: "strict", Segment: null, Err: null, Hits: hits, Suggestions: []));
                 continue;
+            }
+
+            var seg = PrefixToken(id);
+            if (seg.Length > 0 && !string.Equals(seg, id, StringComparison.Ordinal))
+            {
+                var (segResp, segErr) = Service.SearchAsync(ws, sln, seg, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
+                if (string.IsNullOrEmpty(segErr) && segResp.Hits.Count > 0)
+                {
+                    var segHits = segResp.Hits
+                        .Take(topN)
+                        .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
+                        .ToList();
+                    results.Add(new VerifyItemDto(id, Exists: true, MatchKind: "segment", Segment: seg, Err: null, Hits: segHits, Suggestions: []));
+                    continue;
+                }
             }
 
             if (suggestions == 0)
             {
-                results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: []));
+                results.Add(new VerifyItemDto(id, Exists: false, MatchKind: "strict", Segment: null, Err: null, Hits: [], Suggestions: []));
                 continue;
             }
 
@@ -259,7 +274,7 @@ internal static class ToolHandlers
             var (sugResp, sugErr) = Service.SearchAsync(ws, sln, q, Math.Max(suggestions, 5), pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
             if (!string.IsNullOrEmpty(sugErr))
             {
-                results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: []));
+                results.Add(new VerifyItemDto(id, Exists: false, MatchKind: "strict", Segment: null, Err: null, Hits: [], Suggestions: []));
                 continue;
             }
 
@@ -268,7 +283,7 @@ internal static class ToolHandlers
                 .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                 .ToList();
 
-            results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: sug));
+            results.Add(new VerifyItemDto(id, Exists: false, MatchKind: "strict", Segment: null, Err: null, Hits: [], Suggestions: sug));
         }
 
         return JsonSerializer.Serialize(new VerifyResultDto(
@@ -478,6 +493,8 @@ internal static class ToolHandlers
     private sealed record VerifyItemDto(
         string Identifier,
         bool Exists,
+        string MatchKind,
+        string? Segment,
         string? Err,
         List<HitDto> Hits,
         List<HitDto> Suggestions);
