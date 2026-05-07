@@ -13,7 +13,7 @@ internal static class SqliteFtsIndex
     {
         var dir = Path.Combine(workspaceRoot, indexDirectoryRelative.TrimStart(Path.DirectorySeparatorChar, '/'));
         Directory.CreateDirectory(dir);
-        return ResolveActiveDatabasePath(dir);
+        return Path.Combine(dir, $"codebase-index-v{FormatVersion}.sqlite");
     }
 
     internal static Task<ReindexSummary> FullRebuildAsync(
@@ -27,16 +27,6 @@ internal static class SqliteFtsIndex
         var sw = System.Diagnostics.Stopwatch.StartNew();
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
 
-        var indexDir = Path.GetDirectoryName(dbPath);
-        if (string.IsNullOrWhiteSpace(indexDir))
-            throw new InvalidOperationException($"Invalid dbPath: '{dbPath}'");
-        Directory.CreateDirectory(indexDir);
-
-        // Lock-free rebuild: build into a brand-new DB file; then atomically flip a small "active" pointer.
-        // Readers can keep the old DB open as long as they want; reindex never replaces the file they hold.
-        var newDbFileName = $"codebase-index-v{FormatVersion}.{Guid.NewGuid():n}.sqlite";
-        var newDbPath = Path.Combine(indexDir, newDbFileName);
-
         var filesIndexed = 0;
         var skippedLarge = 0;
         var skippedBinary = 0;
@@ -44,16 +34,31 @@ internal static class SqliteFtsIndex
         var skippedSample = new List<SkippedPath>(capacity: 64);
 
         {
-            using var conn = new SqliteConnection($"Data Source={newDbPath};Mode=ReadWriteCreate");
+            using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
             conn.Open();
 
-            InitEmptyIndex(conn, workspaceRoot);
+            // Root cause fix for Windows file-locking: do NOT replace/rename the DB file.
+            // Rebuild in-place by swapping tables inside the same SQLite file (WAL allows concurrent readers).
+            EnsureMetaTable(conn);
+
+            // Prepare a fresh FTS table for the new build.
+            Exec(conn, "DROP TABLE IF EXISTS chunks_new;");
+            Exec(conn, """
+                CREATE VIRTUAL TABLE chunks_new USING fts5(
+                  path,
+                  extension UNINDEXED,
+                  line_start UNINDEXED,
+                  line_end UNINDEXED,
+                  body,
+                  tokenize='unicode61 remove_diacritics 1'
+                );
+                """);
 
             using var tx = conn.BeginTransaction();
             using var insert = conn.CreateCommand();
             insert.Transaction = tx;
             insert.CommandText = """
-                INSERT INTO chunks(path, extension, line_start, line_end, body)
+                INSERT INTO chunks_new(path, extension, line_start, line_end, body)
                 VALUES ($path, $ext, $ls, $le, $body);
                 """;
 
@@ -142,15 +147,39 @@ internal static class SqliteFtsIndex
             }
 
             tx.Commit();
+
+            // Swap tables atomically.
+            using var swap = conn.CreateCommand();
+            swap.CommandText = """
+                BEGIN IMMEDIATE;
+                DROP TABLE IF EXISTS chunks_old;
+                ALTER TABLE chunks RENAME TO chunks_old;
+                ALTER TABLE chunks_new RENAME TO chunks;
+                DROP TABLE IF EXISTS chunks_old;
+                COMMIT;
+                """;
+            try
+            {
+                swap.ExecuteNonQuery();
+            }
+            catch (SqliteException)
+            {
+                // First build: chunks may not exist yet.
+                Exec(conn, "BEGIN IMMEDIATE;");
+                Exec(conn, "ALTER TABLE chunks_new RENAME TO chunks;");
+                Exec(conn, "COMMIT;");
+            }
+
+            UpsertMeta(conn, "format_version", FormatVersion.ToString(CultureInfo.InvariantCulture));
+            UpsertMeta(conn, "indexed_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            UpsertMeta(conn, "workspace_root", workspaceRoot);
         }
 
         sw.Stop();
 
-        TryWriteActivePointer(indexDir, newDbFileName);
-
         return new ReindexSummary(
             FormatVersion,
-            newDbPath,
+            dbPath,
             filesIndexed,
             skippedLarge,
             skippedBinary,
@@ -166,66 +195,34 @@ internal static class SqliteFtsIndex
         sample.Add(new SkippedPath(relPath, reason));
     }
 
-    private static string ResolveActiveDatabasePath(string indexDir)
+    private static void Exec(SqliteConnection conn, string sql)
     {
-        var pointer = GetActivePointerPath(indexDir);
-        if (File.Exists(pointer))
-        {
-            try
-            {
-                var name = File.ReadAllText(pointer).Trim();
-                if (name.Length != 0)
-                {
-                    var candidate = Path.Combine(indexDir, name);
-                    if (File.Exists(candidate))
-                        return candidate;
-                }
-            }
-            catch
-            {
-                // ignore; fallback below
-            }
-        }
-
-        // Back-compat fallback (pre lock-free pointer): fixed filename.
-        return Path.Combine(indexDir, $"codebase-index-v{FormatVersion}.sqlite");
+        using var c = conn.CreateCommand();
+        c.CommandText = sql;
+        c.ExecuteNonQuery();
     }
 
-    private static string GetActivePointerPath(string indexDir)
-        => Path.Combine(indexDir, $"active-v{FormatVersion}.txt");
-
-    private static void TryWriteActivePointer(string indexDir, string activeDbFileName)
+    private static void EnsureMetaTable(SqliteConnection conn)
     {
-        var pointer = GetActivePointerPath(indexDir);
-        var tmp = pointer + ".tmp-" + Guid.NewGuid().ToString("n");
+        Exec(conn, "PRAGMA journal_mode=WAL;");
+        Exec(conn, """
+            CREATE TABLE IF NOT EXISTS meta(
+              key TEXT PRIMARY KEY,
+              value TEXT
+            );
+            """);
+    }
 
-        for (var attempt = 0; attempt < 6; attempt++)
-        {
-            try
-            {
-                File.WriteAllText(tmp, activeDbFileName, Encoding.UTF8);
-                File.Move(tmp, pointer, overwrite: true);
-                return;
-            }
-            catch (IOException) when (attempt < 5)
-            {
-                Thread.Sleep(80 * (attempt + 1));
-            }
-            finally
-            {
-                try
-                {
-                    if (File.Exists(tmp))
-                        File.Delete(tmp);
-                }
-                catch
-                {
-                    // best-effort
-                }
-            }
-        }
-
-        throw new IOException($"Could not write active pointer: '{pointer}'.");
+    private static void UpsertMeta(SqliteConnection conn, string key, string value)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO meta(key,value) VALUES($k, $v)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+            """;
+        cmd.Parameters.AddWithValue("$k", key);
+        cmd.Parameters.AddWithValue("$v", value);
+        cmd.ExecuteNonQuery();
     }
 
     private static void InitEmptyIndex(SqliteConnection conn, string workspaceRoot)
