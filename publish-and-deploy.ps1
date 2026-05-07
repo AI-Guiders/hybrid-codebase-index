@@ -18,6 +18,10 @@ $outDir = Join-Path $here "publish"
 
 Push-Location $here
 try {
+    # Keep docs/manifests in sync with ToolCatalog.
+    & dotnet run --project (Join-Path $here "tools\\ExportMcpManifest\\ExportMcpManifest.csproj") -- --write | Out-Null
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     $publishArgs = @(
         "publish", $csproj,
         "-c", "Release",

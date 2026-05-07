@@ -16,6 +16,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="tools\**\*.cs" />
+    <Compile Remove="HybridCodebaseIndex.Mcp.Tests\**\*.cs" />
+    <None Remove="HybridCodebaseIndex.Mcp.Tests\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>HybridCodebaseIndex.Mcp.Tests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ExportMcpManifest</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="0.8.0-preview.1" />
   </ItemGroup>
 

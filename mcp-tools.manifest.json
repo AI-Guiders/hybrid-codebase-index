@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "mcp_id": "hybrid-codebase-index",
+  "title": "Hybrid Codebase Index MCP",
+  "tools": [
+    {
+      "name": "codebase_index_version",
+      "description": "Версия MCP сервера: assembly version + informational version (commit), runtime."
+    },
+    {
+      "name": "codebase_index_search",
+      "description": "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5, ADR 0105). hit_kind=text_fts. До reindex база может отсутствовать."
+    },
+    {
+      "name": "codebase_index_explain",
+      "description": "Explain для одного попадания (по hit_id из search): вернуть контекст чанка и метаданные."
+    },
+    {
+      "name": "codebase_index_status",
+      "description": "Статус локального индекса: путь к SQLite, число документов, версия формата."
+    },
+    {
+      "name": "codebase_index_reindex",
+      "description": "Полная перестройка индекса (v0): обход расширений, FTS5, без инкрементального watcher."
+    }
+  ]
+}
