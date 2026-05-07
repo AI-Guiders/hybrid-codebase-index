@@ -1,6 +1,6 @@
 # ADR 0105: Hybrid Codebase Index (ядро + MCP) for C# stacks with Roslyn Truth
 
-> **Канон:** полный текст ADR хранится в этом репозитории (`docs/ADR-0105-hybrid-codebase-index-core-and-mcp.md`). В CascadeIDE файл [`0105-hybrid-codebase-index-for-csharp-web.md`](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0105-hybrid-codebase-index-for-csharp-web.md) — короткая отсылка сюда для индекса ADR. Продуктовая интеграция IDE — **[ADR 0106](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0106-hybrid-codebase-index-cascadeide-integration-and-semantic-map.md)** (репозиторий `cascade-ide`).
+> **Канон:** полный текст ADR хранится в этом репозитории (`docs/ADR-0105-hybrid-codebase-index-core-and-mcp.md`). Короткий рассказ «зачем и почему так» — **[design-rationale.md](design-rationale.md)**. В CascadeIDE файл [`0105-hybrid-codebase-index-for-csharp-web.md`](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0105-hybrid-codebase-index-for-csharp-web.md) — отсылка в индекс ADR IDE. Продуктовая интеграция — **[ADR 0106](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0106-hybrid-codebase-index-cascadeide-integration-and-semantic-map.md)**.
 >
 > Внешние ссылки ниже на ADR вида «0039…», «0102…» ведут в каталог **`cascade-ide` `docs/adr`** на GitHub.
 
