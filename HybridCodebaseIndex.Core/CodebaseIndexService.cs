@@ -13,12 +13,12 @@ public sealed class CodebaseIndexService
     }
 
     public string GetDatabasePath(string workspaceRoot)
-        => SqliteFtsIndex.ResolveDatabasePath(Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar)), _indexDirectoryRelative);
+        => SqliteFtsIndex.ResolveDatabasePathForRead(Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar)), _indexDirectoryRelative);
 
     public Task<ReindexSummary> FullReindexAsync(string workspaceRoot, CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-        var db = SqliteFtsIndex.ResolveDatabasePath(root, _indexDirectoryRelative);
+        var db = SqliteFtsIndex.ResolveDatabasePathForWrite(root, _indexDirectoryRelative);
         return SqliteFtsIndex.FullRebuildAsync(root, db, cancellationToken);
     }
 
@@ -28,7 +28,7 @@ public sealed class CodebaseIndexService
         CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-        var db = SqliteFtsIndex.ResolveDatabasePath(root, _indexDirectoryRelative);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, _indexDirectoryRelative);
         return SqliteFtsIndex.ExplainHitAsync(root, db, hitId, cancellationToken);
     }
 
@@ -39,14 +39,14 @@ public sealed class CodebaseIndexService
         CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-        var db = SqliteFtsIndex.ResolveDatabasePath(root, _indexDirectoryRelative);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, _indexDirectoryRelative);
         return SqliteFtsIndex.SearchAsync(root, db, query, topN, cancellationToken);
     }
 
     public Task<IndexStatus> GetStatusAsync(string workspaceRoot, CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-        var db = SqliteFtsIndex.ResolveDatabasePath(root, _indexDirectoryRelative);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, _indexDirectoryRelative);
         return SqliteFtsIndex.GetStatusAsync(root, db, cancellationToken);
     }
 }
