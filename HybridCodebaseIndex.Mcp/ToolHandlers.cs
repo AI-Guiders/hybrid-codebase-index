@@ -135,6 +135,8 @@ internal static class ToolHandlers
             FilesSkippedTooLarge: summary.FilesSkippedTooLarge,
             FilesSkippedBinary: summary.FilesSkippedBinary,
             FilesSkippedExcluded: summary.FilesSkippedExcluded,
+            SkippedReasonCounts: summary.SkippedReasonCounts,
+            SkippedTopPathPrefixes: summary.SkippedTopPathPrefixes.Select(static p => new TopPrefixDto(p.PathPrefix, p.Count)).ToList(),
             SkippedSample: summary.SkippedSample.Select(static s => new SkippedDto(s.Path, s.Reason)).ToList(),
             DurationMs: (long)summary.Duration.TotalMilliseconds);
 
@@ -249,8 +251,14 @@ internal static class ToolHandlers
         int FilesSkippedTooLarge,
         int FilesSkippedBinary,
         int FilesSkippedExcluded,
+        IReadOnlyDictionary<string, int> SkippedReasonCounts,
+        List<TopPrefixDto> SkippedTopPathPrefixes,
         List<SkippedDto> SkippedSample,
         long DurationMs);
+
+    private sealed record TopPrefixDto(
+        string PathPrefix,
+        int Count);
 
     private sealed record SkippedDto(
         string Path,

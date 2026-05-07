@@ -50,6 +50,8 @@ public sealed record ReindexSummary(
     int FilesSkippedTooLarge,
     int FilesSkippedBinary,
     int FilesSkippedExcluded,
+    IReadOnlyDictionary<string, int> SkippedReasonCounts,
+    IReadOnlyList<(string PathPrefix, int Count)> SkippedTopPathPrefixes,
     IReadOnlyList<SkippedPath> SkippedSample,
     TimeSpan Duration);
 

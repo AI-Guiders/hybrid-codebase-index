@@ -93,6 +93,8 @@ internal static class SqliteFtsIndex
         var skippedBinary = 0;
         var skippedExcluded = 0;
         var skippedSample = new List<SkippedPath>(capacity: 64);
+        var skippedReasonCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var skippedTopPathPrefixes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
         conn.Open();
@@ -155,7 +157,7 @@ internal static class SqliteFtsIndex
                 if (WorkspaceScanner.ShouldExcludePath(absolute, settings.ExcludePathSegments))
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
                     continue;
                 }
             }
@@ -171,7 +173,7 @@ internal static class SqliteFtsIndex
                 if (GitIgnoreRules.IsIgnored(gitIgnore, rel))
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, rel, "gitignore");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "gitignore");
                     continue;
                 }
 
@@ -182,14 +184,14 @@ internal static class SqliteFtsIndex
                     if (info.Length > maxBytes)
                     {
                         skippedLarge++;
-                        AddSample(skippedSample, rel, "too_large");
+                        AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "too_large");
                         continue;
                     }
                 }
                 catch
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, rel, "io_error");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "io_error");
                     continue;
                 }
 
@@ -200,7 +202,7 @@ internal static class SqliteFtsIndex
                 if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
                 {
                     skippedBinary++;
-                    AddSample(skippedSample, rel, "binary");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "binary");
                     continue;
                 }
 
@@ -287,6 +289,8 @@ internal static class SqliteFtsIndex
             skippedLarge,
             skippedBinary,
             skippedExcluded,
+            skippedReasonCounts,
+            TopPrefixes(skippedTopPathPrefixes),
             skippedSample,
             sw.Elapsed);
     }
@@ -301,6 +305,8 @@ internal static class SqliteFtsIndex
         var skippedBinary = 0;
         var skippedExcluded = 0;
         var skippedSample = new List<SkippedPath>(capacity: 64);
+        var skippedReasonCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var skippedTopPathPrefixes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
         conn.Open();
@@ -346,7 +352,7 @@ internal static class SqliteFtsIndex
                 if (WorkspaceScanner.ShouldExcludePath(absolute, settings.ExcludePathSegments))
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
                     continue;
                 }
 
@@ -356,7 +362,7 @@ internal static class SqliteFtsIndex
                 if (GitIgnoreRules.IsIgnored(gitIgnore, rel))
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, rel, "gitignore");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "gitignore");
                     continue;
                 }
 
@@ -367,14 +373,14 @@ internal static class SqliteFtsIndex
                     if (info.Length > maxBytes)
                     {
                         skippedLarge++;
-                        AddSample(skippedSample, rel, "too_large");
+                        AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "too_large");
                         continue;
                     }
                 }
                 catch
                 {
                     skippedExcluded++;
-                    AddSample(skippedSample, rel, "io_error");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "io_error");
                     continue;
                 }
 
@@ -389,7 +395,7 @@ internal static class SqliteFtsIndex
                 if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
                 {
                     skippedBinary++;
-                    AddSample(skippedSample, rel, "binary");
+                    AddSkip(skippedSample, skippedReasonCounts, skippedTopPathPrefixes, rel, "binary");
                     continue;
                 }
 
@@ -456,6 +462,8 @@ internal static class SqliteFtsIndex
             skippedLarge,
             skippedBinary,
             skippedExcluded,
+            skippedReasonCounts,
+            TopPrefixes(skippedTopPathPrefixes),
             skippedSample,
             sw.Elapsed);
     }
@@ -576,12 +584,36 @@ internal static class SqliteFtsIndex
         cmd.ExecuteNonQuery();
     }
 
-    private static void AddSample(List<SkippedPath> sample, string relPath, string reason)
+    private static void AddSkip(
+        List<SkippedPath> sample,
+        Dictionary<string, int> reasonCounts,
+        Dictionary<string, int> prefixCounts,
+        string relPath,
+        string reason)
     {
+        reasonCounts[reason] = reasonCounts.TryGetValue(reason, out var c) ? c + 1 : 1;
+        var pfx = GetPathPrefix(relPath);
+        prefixCounts[pfx] = prefixCounts.TryGetValue(pfx, out var pc) ? pc + 1 : 1;
+
         if (sample.Count >= 50)
             return;
         sample.Add(new SkippedPath(relPath, reason));
     }
+
+    private static string GetPathPrefix(string relPath)
+    {
+        var p = relPath.Replace("\\", "/", StringComparison.Ordinal);
+        var idx = p.IndexOf('/', StringComparison.Ordinal);
+        return idx <= 0 ? p : p[..idx];
+    }
+
+    private static IReadOnlyList<(string PathPrefix, int Count)> TopPrefixes(Dictionary<string, int> prefixCounts)
+        => prefixCounts
+            .OrderByDescending(static kv => kv.Value)
+            .ThenBy(static kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .Select(static kv => (kv.Key, kv.Value))
+            .ToArray();
 
     private static void Exec(SqliteConnection conn, string sql, SqliteTransaction? tx = null)
     {
