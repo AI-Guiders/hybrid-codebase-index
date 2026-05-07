@@ -34,7 +34,9 @@ public sealed record IndexStatus(
     bool DatabaseExists,
     int DocumentCount,
     string? IndexedAtIso,
-    string? WorkspaceRootNormalized);
+    string? WorkspaceRootNormalized,
+    string? LastReindexError,
+    string? LastReindexErrorAtIso);
 
 public sealed record ReindexSummary(
     int IndexFormatVersion,

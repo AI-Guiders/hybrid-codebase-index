@@ -33,14 +33,15 @@ internal static class SqliteFtsIndex
         var skippedExcluded = 0;
         var skippedSample = new List<SkippedPath>(capacity: 64);
 
+        using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
+        conn.Open();
+
+        // Root cause fix for Windows file-locking: do NOT replace/rename the DB file.
+        // Rebuild in-place by swapping tables inside the same SQLite file (WAL allows concurrent readers).
+        EnsureMetaTable(conn);
+
+        try
         {
-            using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
-            conn.Open();
-
-            // Root cause fix for Windows file-locking: do NOT replace/rename the DB file.
-            // Rebuild in-place by swapping tables inside the same SQLite file (WAL allows concurrent readers).
-            EnsureMetaTable(conn);
-
             // Prepare a fresh FTS table for the new build.
             Exec(conn, "DROP TABLE IF EXISTS chunks_new;");
             Exec(conn, """
@@ -149,30 +150,46 @@ internal static class SqliteFtsIndex
             tx.Commit();
 
             // Swap tables atomically.
-            using var swap = conn.CreateCommand();
-            swap.CommandText = """
-                BEGIN IMMEDIATE;
-                DROP TABLE IF EXISTS chunks_old;
-                ALTER TABLE chunks RENAME TO chunks_old;
-                ALTER TABLE chunks_new RENAME TO chunks;
-                DROP TABLE IF EXISTS chunks_old;
-                COMMIT;
-                """;
-            try
+            using (var swapTx = conn.BeginTransaction())
             {
-                swap.ExecuteNonQuery();
-            }
-            catch (SqliteException)
-            {
-                // First build: chunks may not exist yet.
-                Exec(conn, "BEGIN IMMEDIATE;");
-                Exec(conn, "ALTER TABLE chunks_new RENAME TO chunks;");
-                Exec(conn, "COMMIT;");
+                // Keep it simple: run DDL under a single transaction object, avoid manual BEGIN/COMMIT SQL.
+                Exec(conn, "DROP TABLE IF EXISTS chunks_old;", swapTx);
+                try
+                {
+                    Exec(conn, "ALTER TABLE chunks RENAME TO chunks_old;", swapTx);
+                }
+                catch (SqliteException)
+                {
+                    // First build: chunks doesn't exist yet.
+                }
+
+                Exec(conn, "ALTER TABLE chunks_new RENAME TO chunks;", swapTx);
+                Exec(conn, "DROP TABLE IF EXISTS chunks_old;", swapTx);
+                swapTx.Commit();
             }
 
             UpsertMeta(conn, "format_version", FormatVersion.ToString(CultureInfo.InvariantCulture));
             UpsertMeta(conn, "indexed_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             UpsertMeta(conn, "workspace_root", workspaceRoot);
+
+            // Clear last error on success.
+            UpsertMeta(conn, "reindex_error", "");
+            UpsertMeta(conn, "reindex_error_at", "");
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: store the last failure so status can surface it.
+            try
+            {
+                UpsertMeta(conn, "reindex_error", ex.GetType().Name + ": " + ex.Message);
+                UpsertMeta(conn, "reindex_error_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            }
+            catch
+            {
+                // ignore
+            }
+
+            throw;
         }
 
         sw.Stop();
@@ -195,9 +212,10 @@ internal static class SqliteFtsIndex
         sample.Add(new SkippedPath(relPath, reason));
     }
 
-    private static void Exec(SqliteConnection conn, string sql)
+    private static void Exec(SqliteConnection conn, string sql, SqliteTransaction? tx = null)
     {
         using var c = conn.CreateCommand();
+        c.Transaction = tx;
         c.CommandText = sql;
         c.ExecuteNonQuery();
     }
@@ -403,16 +421,22 @@ internal static class SqliteFtsIndex
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         var exists = File.Exists(dbPath);
         if (!exists)
-            return new IndexStatus(FormatVersion, dbPath, false, 0, null, workspaceRoot);
+            return new IndexStatus(FormatVersion, dbPath, false, 0, null, workspaceRoot, null, null);
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
 
         var indexedAt = ReadMeta(conn, "indexed_at");
+        var lastErr = ReadMeta(conn, "reindex_error");
+        if (string.IsNullOrWhiteSpace(lastErr))
+            lastErr = null;
+        var lastErrAt = ReadMeta(conn, "reindex_error_at");
+        if (string.IsNullOrWhiteSpace(lastErrAt))
+            lastErrAt = null;
         using var countCmd = conn.CreateCommand();
         countCmd.CommandText = "SELECT count(*) FROM chunks;";
         var docCount = Convert.ToInt32(countCmd.ExecuteScalar() ?? 0);
-        return new IndexStatus(FormatVersion, dbPath, true, docCount, indexedAt, workspaceRoot);
+        return new IndexStatus(FormatVersion, dbPath, true, docCount, indexedAt, workspaceRoot, lastErr, lastErrAt);
     }
 
     private static string? ReadMeta(SqliteConnection conn, string key)

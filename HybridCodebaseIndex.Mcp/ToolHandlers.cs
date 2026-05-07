@@ -77,7 +77,9 @@ internal static class ToolHandlers
             DatabaseExists: st.DatabaseExists,
             DocumentCount: st.DocumentCount,
             IndexedAtIso: st.IndexedAtIso,
-            WorkspaceRoot: st.WorkspaceRootNormalized);
+            WorkspaceRoot: st.WorkspaceRootNormalized,
+            LastReindexError: st.LastReindexError,
+            LastReindexErrorAtIso: st.LastReindexErrorAtIso);
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -157,7 +159,9 @@ internal static class ToolHandlers
         bool DatabaseExists,
         int DocumentCount,
         string? IndexedAtIso,
-        string? WorkspaceRoot);
+        string? WorkspaceRoot,
+        string? LastReindexError,
+        string? LastReindexErrorAtIso);
 
     private sealed record ReindexResultDto(
         int IndexFormatVersion,
