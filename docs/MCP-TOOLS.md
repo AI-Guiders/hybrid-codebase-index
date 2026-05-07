@@ -26,7 +26,7 @@ Explain для одного попадания (по hit_id из search): вер
 
 ### `codebase_index_reindex`
 
-Полная перестройка индекса (v0): обход расширений, FTS5, без инкрементального watcher.
+Перестройка индекса (FTS5). По умолчанию инкрементальная по файлам; full_rebuild=true — полная.
 
 <!-- GENERATED:ToolCatalog END -->
 

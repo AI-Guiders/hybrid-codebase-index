@@ -21,7 +21,7 @@
     },
     {
       "name": "codebase_index_reindex",
-      "description": "Полная перестройка индекса (v0): обход расширений, FTS5, без инкрементального watcher."
+      "description": "Перестройка индекса (FTS5). По умолчанию инкрементальная по файлам; full_rebuild=true — полная."
     }
   ]
 }
