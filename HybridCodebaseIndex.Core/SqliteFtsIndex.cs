@@ -144,9 +144,24 @@ internal static class SqliteFtsIndex
                     roots.Add(p);
             }
 
+            var extSet = new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase);
+
+            var excludeRootFullPaths = new List<string>(settings.ExcludeRoots.Count);
+            foreach (var rel in settings.ExcludeRoots)
+            {
+                var p = rel?.Trim();
+                if (string.IsNullOrWhiteSpace(p))
+                    continue;
+                if (Path.IsPathRooted(p) || p.Contains("..", StringComparison.Ordinal))
+                    continue;
+                var abs = Path.GetFullPath(Path.Combine(workspaceRoot, p));
+                if (Directory.Exists(abs))
+                    excludeRootFullPaths.Add(abs.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+            }
+
             var candidates = new List<string>(capacity: 8192);
             foreach (var root in roots)
-                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extensions));
+                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extSet, settings.ExcludePathSegments, excludeRootFullPaths));
 
             var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot, settings.IgnoreFiles);
 
@@ -335,9 +350,24 @@ internal static class SqliteFtsIndex
                     roots.Add(p);
             }
 
+            var extSet = new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase);
+
+            var excludeRootFullPaths = new List<string>(settings.ExcludeRoots.Count);
+            foreach (var rel in settings.ExcludeRoots)
+            {
+                var p = rel?.Trim();
+                if (string.IsNullOrWhiteSpace(p))
+                    continue;
+                if (Path.IsPathRooted(p) || p.Contains("..", StringComparison.Ordinal))
+                    continue;
+                var abs = Path.GetFullPath(Path.Combine(workspaceRoot, p));
+                if (Directory.Exists(abs))
+                    excludeRootFullPaths.Add(abs.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+            }
+
             var candidates = new List<string>(capacity: 8192);
             foreach (var root in roots)
-                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extensions));
+                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extSet, settings.ExcludePathSegments, excludeRootFullPaths));
 
             var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot, settings.IgnoreFiles);
 

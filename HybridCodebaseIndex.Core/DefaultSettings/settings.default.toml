@@ -14,6 +14,9 @@ include_cs_in_fts = true
 # Optional extra roots (relative to workspace root) to include in indexing.
 extra_include_roots = []
 
+# Optional roots (relative to workspace root) to exclude from indexing (fast directory-skip).
+exclude_roots = []
+
 # Default indexed extensions (strings without dot are accepted).
 include_extensions = ["md", "mdx", "csproj", "slnx", "props", "targets", "toml", "editorconfig", "json", "yml", "yaml", "razor", "css", "scss", "html", "axaml", "cs"]
 

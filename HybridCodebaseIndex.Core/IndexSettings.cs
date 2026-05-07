@@ -6,6 +6,7 @@ namespace HybridCodebaseIndex.Core;
 public sealed record IndexSettings(
     bool IncludeCsInFts,
     IReadOnlyList<string> ExtraIncludeRoots,
+    IReadOnlyList<string> ExcludeRoots,
     IReadOnlyList<string>? IncludeExtensions,
     IReadOnlyList<string>? ExcludeExtensions,
     IReadOnlyList<string> ExcludePathSegments,
@@ -18,6 +19,7 @@ public sealed record IndexSettings(
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
         ExtraIncludeRoots: [],
+        ExcludeRoots: [],
         IncludeExtensions: null,
         ExcludeExtensions: null,
         ExcludePathSegments: [],
@@ -65,6 +67,7 @@ public sealed record IndexSettings(
         // Merge: embedded = base, disk = overlay.
         var includeCs = ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
         var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
+        var excludeRoots = ReadStringArray(diskModel, embeddedModel, "exclude_roots") ?? [];
         var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
         var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
         var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
@@ -75,7 +78,7 @@ public sealed record IndexSettings(
         var overlapLines = ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
         var probeBytes = ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
 
-        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments, ignoreFiles, maxBytes, chunkLines, overlapLines, probeBytes);
+        settings = new IndexSettings(includeCs, extraRoots, excludeRoots, includeExt, excludeExt, excludeSegments, ignoreFiles, maxBytes, chunkLines, overlapLines, probeBytes);
         return true;
     }
 
@@ -105,11 +108,20 @@ public sealed record IndexSettings(
             baseList = [];
         }
 
-        if (ExcludeExtensions is not { Count: > 0 })
-            return baseList;
+        IEnumerable<string> filtered = baseList;
+        if (ExcludeExtensions is { Count: > 0 })
+        {
+            var deny = new HashSet<string>(ExcludeExtensions, StringComparer.OrdinalIgnoreCase);
+            filtered = filtered.Where(e => !deny.Contains(e));
+        }
 
-        var deny = new HashSet<string>(ExcludeExtensions, StringComparer.OrdinalIgnoreCase);
-        return baseList.Where(e => !deny.Contains(e)).ToArray();
+        // include_cs_in_fts is a first-class toggle; treat it as stronger than include_extensions defaults.
+        if (!IncludeCsInFts)
+            filtered = filtered.Where(static e => !string.Equals(e, ".cs", StringComparison.OrdinalIgnoreCase));
+        else if (baseList.Count > 0 && !filtered.Contains(".cs", StringComparer.OrdinalIgnoreCase))
+            filtered = filtered.Concat([".cs"]);
+
+        return filtered.ToArray();
     }
 
     private static TomlTable? TryReadEmbeddedModel(out string? error)

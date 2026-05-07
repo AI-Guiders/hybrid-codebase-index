@@ -4,17 +4,57 @@ using System.Text;
 
 internal static class WorkspaceScanner
 {
-    internal static IEnumerable<string> EnumerateIndexableFiles(string workspaceRoot, IReadOnlyList<string> extensions)
+    internal static IEnumerable<string> EnumerateIndexableFiles(
+        string rootDirectory,
+        IReadOnlySet<string> extensions,
+        IReadOnlyList<string> excludePathSegments,
+        IReadOnlyList<string> excludeRootFullPaths)
     {
-        var normalized = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-        if (!Directory.Exists(normalized))
+        var normalizedRoot = Path.GetFullPath(rootDirectory.TrimEnd(Path.DirectorySeparatorChar));
+        if (!Directory.Exists(normalizedRoot))
             yield break;
 
-        foreach (var ext in extensions)
+        // Single-pass traversal (directory stack) to avoid N passes per extension.
+        var stack = new Stack<string>();
+        stack.Push(normalizedRoot);
+
+        while (stack.Count > 0)
         {
-            foreach (var file in Directory.EnumerateFiles(normalized, $"*{ext}", SearchOption.AllDirectories))
+            var dir = stack.Pop();
+
+            if (ShouldExcludeDirectory(dir, excludePathSegments, excludeRootFullPaths))
+                continue;
+
+            IEnumerable<string> subDirs;
+            try
             {
-                yield return file;
+                subDirs = Directory.EnumerateDirectories(dir);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var sd in subDirs)
+                stack.Push(sd);
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(dir);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var f in files)
+            {
+                var ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext.Length == 0)
+                    continue;
+                if (extensions.Contains(ext))
+                    yield return f;
             }
         }
     }
@@ -35,6 +75,34 @@ internal static class WorkspaceScanner
             var token = $"{Path.DirectorySeparatorChar}{seg}{Path.DirectorySeparatorChar}";
             if (fullPath.Contains(token, StringComparison.OrdinalIgnoreCase))
                 return true;
+        }
+
+        return false;
+    }
+
+    private static bool ShouldExcludeDirectory(
+        string fullPath,
+        IReadOnlyList<string> excludePathSegments,
+        IReadOnlyList<string> excludeRootFullPaths)
+    {
+        foreach (var root in excludeRootFullPaths)
+        {
+            if (fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        if (excludePathSegments.Count == 0)
+            return false;
+
+        // Quick check by directory name first.
+        var name = Path.GetFileName(fullPath);
+        if (!string.IsNullOrEmpty(name))
+        {
+            foreach (var seg0 in excludePathSegments)
+            {
+                if (string.Equals(name, seg0?.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
         }
 
         return false;
