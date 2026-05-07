@@ -177,6 +177,10 @@ public sealed record IndexSettings(
         return filtered.ToArray();
     }
 
+    /// <summary>Те же правила, что <see cref="GetEffectiveExtensions"/>, для vec и проверок на границе поиска.</summary>
+    public HashSet<string> GetEffectiveExtensionsSet()
+        => new(GetEffectiveExtensions(), StringComparer.OrdinalIgnoreCase);
+
     private static TomlTable? TryReadEmbeddedModel(out string? error)
     {
         error = null;

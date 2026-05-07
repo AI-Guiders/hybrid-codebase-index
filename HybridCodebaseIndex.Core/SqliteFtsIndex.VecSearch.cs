@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Globalization;
+using System.Text;
 using HybridCodebaseIndex.Core.Embeddings;
 using Microsoft.Data.Sqlite;
 
@@ -67,12 +69,13 @@ internal static partial class SqliteFtsIndex
 
         var indexDir = Path.GetDirectoryName(dbPath)!;
         var sqliteVecLoaded = SqliteVecInterop.TryEnableAndLoad(conn, settings, indexDir, out _);
-        var vecHits =
+        List<(long chunkRowId, double sim)> vecHitsRaw =
             sqliteVecLoaded && TableExists(conn, "vec_chunks")
                 ? SqliteVecInterop.QueryTopK(conn, qv, vecTopK)
                 : TableExists(conn, "vectors")
-                    ? VecTopK(conn, qv, qn, vecTopK)
+                    ? VecTopK(conn, qv, qn, vecTopK, settings)
                     : [];
+        var vecHits = FilterVecHitsByAllowedChunkExtensions(conn, settings, vecHitsRaw);
 
         // Merge by hitId (chunk rowid)
         var merged = new Dictionary<long, IndexHit>();
@@ -129,6 +132,50 @@ internal static partial class SqliteFtsIndex
         return (new SearchResponse(FormatVersion, userQuery, dbPath, ordered), null);
     }
 
+    /// <summary>Вектор не должен «протекать» для расширений вне FTS-правил до следующего vec_reindex.</summary>
+    private static List<(long chunkRowId, double sim)> FilterVecHitsByAllowedChunkExtensions(
+        SqliteConnection conn,
+        IndexSettings settings,
+        List<(long chunkRowId, double sim)> hits)
+    {
+        if (hits.Count == 0)
+            return hits;
+
+        var allowed = settings.GetEffectiveExtensionsSet();
+        if (allowed.Count == 0)
+            return [];
+
+        var distinctIds = hits.Select(static h => h.chunkRowId).Distinct().ToArray();
+        using var cmd = conn.CreateCommand();
+        var sb = new StringBuilder("SELECT rowid, extension FROM chunks WHERE rowid IN (");
+        for (var i = 0; i < distinctIds.Length; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            var p = "$i" + i.ToString(CultureInfo.InvariantCulture);
+            sb.Append(p);
+            cmd.Parameters.AddWithValue(p, distinctIds[i]);
+        }
+
+        sb.Append(')');
+
+        cmd.CommandText = sb.ToString();
+
+        var extOf = new Dictionary<long, string>(distinctIds.Length);
+        using (var rr = cmd.ExecuteReader())
+        {
+            while (rr.Read())
+            {
+                var id = rr.GetInt64(0);
+                var ext = rr.IsDBNull(1) ? "" : rr.GetString(1);
+                extOf[id] = ext;
+            }
+        }
+
+        return hits.Where(h =>
+            extOf.TryGetValue(h.chunkRowId, out var ext) && allowed.Contains(ext)).ToList();
+    }
+
     private static bool TableExists(SqliteConnection conn, string name)
     {
         using var cmd = conn.CreateCommand();
@@ -137,10 +184,31 @@ internal static partial class SqliteFtsIndex
         return cmd.ExecuteScalar() is not null;
     }
 
-    private static List<(long chunkRowId, double sim)> VecTopK(SqliteConnection conn, float[] qv, double qn, int k)
+    private static List<(long chunkRowId, double sim)> VecTopK(SqliteConnection conn, float[] qv, double qn, int k, IndexSettings settings)
     {
+        var allowedList = settings.GetEffectiveExtensions();
+        if (allowedList.Count == 0)
+            return [];
+
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT chunk_rowid, dim, norm, vec FROM vectors;";
+        var sb = new StringBuilder(
+            """
+            SELECT v.chunk_rowid, v.dim, v.norm, v.vec FROM vectors v
+            INNER JOIN chunks c ON c.rowid = v.chunk_rowid
+            WHERE lower(c.extension) IN (
+            """);
+
+        for (var i = 0; i < allowedList.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            var p = "$e" + i.ToString(CultureInfo.InvariantCulture);
+            sb.Append(p);
+            cmd.Parameters.AddWithValue(p, allowedList[i].ToLowerInvariant());
+        }
+
+        sb.Append(");");
+        cmd.CommandText = sb.ToString();
 
         var top = new List<(long id, double sim)>(capacity: k);
         using var r = cmd.ExecuteReader();

@@ -46,6 +46,8 @@ internal static partial class SqliteFtsIndex
         if (!settings.SemanticEnabled)
             return (0, "semantic_enabled=false in settings; enable it to build vectors.");
 
+        var allowedExt = settings.GetEffectiveExtensionsSet();
+
         var provider = EmbeddingProviderFactory.Create(settings, Path.GetDirectoryName(dbPath));
         var dim = provider.Dimension;
 
@@ -53,8 +55,18 @@ internal static partial class SqliteFtsIndex
         var sqliteVecAvailable = SqliteVecInterop.TryEnableAndLoad(conn, settings, indexDir, out _)
             && SqliteVecInterop.TryEnsureVecChunksTable(conn, dim, out _);
 
+        // Vec использует те же допустимые расширения, что FTS (исключения fts.exclude_extensions и пр.).
+        PruneVectorsAndVecChunksOutsideAllowedExtensions(conn, allowedExt, sqliteVecAvailable);
+
+        if (allowedExt.Count == 0)
+        {
+            UpsertMeta(conn, "vec_dim", dim.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            UpsertMeta(conn, "vec_indexed_at", DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+            return (0, null);
+        }
+
         using var select = conn.CreateCommand();
-        select.CommandText = "SELECT rowid, substr(body, 1, 4000) FROM chunks;";
+        select.CommandText = "SELECT rowid, substr(body, 1, 4000), extension FROM chunks;";
 
         using var upsert = conn.CreateCommand();
         upsert.CommandText = """
@@ -77,6 +89,9 @@ internal static partial class SqliteFtsIndex
 
             var id = r.GetInt64(0);
             var text = r.IsDBNull(1) ? "" : r.GetString(1);
+            var extStored = r.IsDBNull(2) ? "" : r.GetString(2);
+            if (!allowedExt.Contains(extStored))
+                continue;
 
             var emb = provider.EmbedAsync(text, cancellationToken).GetAwaiter().GetResult();
             if (emb.Length != dim)
@@ -101,6 +116,81 @@ internal static partial class SqliteFtsIndex
         UpsertMeta(conn, "vec_dim", dim.ToString(System.Globalization.CultureInfo.InvariantCulture));
         UpsertMeta(conn, "vec_indexed_at", DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
         return (count, null);
+    }
+
+    private static void PruneVectorsAndVecChunksOutsideAllowedExtensions(
+        SqliteConnection conn,
+        HashSet<string> allowedExtensions,
+        bool sqliteVecActive)
+    {
+        if (allowedExtensions.Count == 0)
+        {
+            Exec(conn, "DELETE FROM vectors;");
+            if (sqliteVecActive && TableExists(conn, "vec_chunks"))
+                Exec(conn, "DELETE FROM vec_chunks;");
+            return;
+        }
+
+        var pruneIds = new List<long>();
+        using (var q = conn.CreateCommand())
+        {
+            q.CommandText = "SELECT rowid, extension FROM chunks;";
+            using var r = q.ExecuteReader();
+            while (r.Read())
+            {
+                var id = r.GetInt64(0);
+                var ext = r.IsDBNull(1) ? "" : r.GetString(1);
+                if (!allowedExtensions.Contains(ext))
+                    pruneIds.Add(id);
+            }
+        }
+
+        DeleteVectorsAndVecChunksForRowIds(conn, pruneIds, sqliteVecActive);
+
+        Exec(conn, """
+            DELETE FROM vectors WHERE NOT EXISTS (
+              SELECT 1 FROM chunks c WHERE c.rowid = vectors.chunk_rowid
+            );
+            """);
+
+        if (sqliteVecActive && TableExists(conn, "vec_chunks"))
+        {
+            Exec(conn, """
+                DELETE FROM vec_chunks WHERE NOT EXISTS (
+                  SELECT 1 FROM chunks c WHERE c.rowid = vec_chunks.rowid
+                );
+                """);
+        }
+    }
+
+    private static void DeleteVectorsAndVecChunksForRowIds(SqliteConnection conn, List<long> rowIds, bool sqliteVecActive)
+    {
+        if (rowIds.Count == 0)
+            return;
+
+        const int Batch = 400;
+        for (var offset = 0; offset < rowIds.Count; offset += Batch)
+        {
+            var slice = rowIds.Skip(offset).Take(Batch).ToArray();
+            if (slice.Length == 0)
+                break;
+
+            var placeholders = string.Join(",", slice.Select(static (_, i) => "$p" + i));
+            using var dv = conn.CreateCommand();
+            dv.CommandText = $"DELETE FROM vectors WHERE chunk_rowid IN ({placeholders});";
+            for (var i = 0; i < slice.Length; i++)
+                dv.Parameters.AddWithValue($"$p{i}", slice[i]);
+            dv.ExecuteNonQuery();
+
+            if (sqliteVecActive && TableExists(conn, "vec_chunks"))
+            {
+                using var dvc = conn.CreateCommand();
+                dvc.CommandText = $"DELETE FROM vec_chunks WHERE rowid IN ({placeholders});";
+                for (var i = 0; i < slice.Length; i++)
+                    dvc.Parameters.AddWithValue($"$p{i}", slice[i]);
+                dvc.ExecuteNonQuery();
+            }
+        }
     }
 
     private static (byte[] blob, double norm) SerializeVector(float[] v)
