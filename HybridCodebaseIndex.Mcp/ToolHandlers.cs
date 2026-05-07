@@ -66,7 +66,11 @@ internal static class ToolHandlers
         if (topN > 128)
             topN = 128;
 
-        var (response, err) = Service.SearchAsync(ws, q, topN).GetAwaiter().GetResult();
+        var pathPrefix = OptionalString(args, "path_prefix");
+        var excludePrefixes = OptionalStringArray(args, "exclude_path_prefixes");
+        var extensions = OptionalStringArray(args, "extensions");
+
+        var (response, err) = Service.SearchAsync(ws, q, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
         var dto = new SearchResultDto(
             Err: err,
             IndexFormatVersion: response.IndexFormatVersion,
@@ -149,11 +153,36 @@ internal static class ToolHandlers
         return s.Trim();
     }
 
+    private static string? OptionalString(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.String)
+            return null;
+        var s = el.GetString();
+        return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    }
+
     private static int? OptionalInt(IReadOnlyDictionary<string, JsonElement> args, string key)
     {
         if (!args.TryGetValue(key, out var el))
             return null;
         return el.TryGetInt32(out var i) ? i : null;
+    }
+
+    private static List<string>? OptionalStringArray(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var list = new List<string>();
+        foreach (var it in el.EnumerateArray())
+        {
+            if (it.ValueKind != JsonValueKind.String)
+                continue;
+            var s = it.GetString();
+            if (!string.IsNullOrWhiteSpace(s))
+                list.Add(s.Trim());
+        }
+        return list.Count == 0 ? null : list;
     }
 
     private static bool? OptionalBool(IReadOnlyDictionary<string, JsonElement> args, string key)

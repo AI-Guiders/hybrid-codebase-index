@@ -674,14 +674,20 @@ internal static class SqliteFtsIndex
         string dbPath,
         string query,
         int topN,
+        string? pathPrefix,
+        IReadOnlyList<string>? excludePathPrefixes,
+        IReadOnlyList<string>? extensions,
         CancellationToken cancellationToken)
-        => Task.Run(() => Search(workspaceRoot, dbPath, query, topN), cancellationToken);
+        => Task.Run(() => Search(workspaceRoot, dbPath, query, topN, pathPrefix, excludePathPrefixes, extensions), cancellationToken);
 
     private static (SearchResponse response, string? error) Search(
         string workspaceRoot,
         string dbPath,
         string userQuery,
-        int topN)
+        int topN,
+        string? pathPrefix,
+        IReadOnlyList<string>? excludePathPrefixes,
+        IReadOnlyList<string>? extensions)
     {
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         if (!File.Exists(dbPath))
@@ -695,13 +701,52 @@ internal static class SqliteFtsIndex
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-             SELECT rowid, path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)
-             FROM chunks
-             WHERE chunks MATCH $q
-             ORDER BY bm25(chunks) DESC
-             LIMIT $lim;
-             """;
+        var sql = new StringBuilder();
+        sql.AppendLine("SELECT rowid, path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)");
+        sql.AppendLine("FROM chunks");
+        sql.AppendLine("WHERE chunks MATCH $q");
+
+        if (!string.IsNullOrWhiteSpace(pathPrefix))
+        {
+            var pfx = NormalizePathPrefix(pathPrefix);
+            sql.AppendLine("  AND path LIKE $pfx ESCAPE '\\'");
+            cmd.Parameters.AddWithValue("$pfx", EscapeLike(pfx) + "%");
+        }
+
+        if (excludePathPrefixes is { Count: > 0 })
+        {
+            var i = 0;
+            foreach (var raw in excludePathPrefixes)
+            {
+                var p = NormalizePathPrefix(raw);
+                if (p.Length == 0)
+                    continue;
+                var key = "$xp" + i++;
+                sql.AppendLine($"  AND path NOT LIKE {key} ESCAPE '\\'");
+                cmd.Parameters.AddWithValue(key, EscapeLike(p) + "%");
+            }
+        }
+
+        if (extensions is { Count: > 0 })
+        {
+            var norm = NormalizeExtensionsForFilter(extensions);
+            if (norm.Count > 0)
+            {
+                var keys = new List<string>(norm.Count);
+                for (var i = 0; i < norm.Count; i++)
+                {
+                    var k = "$e" + i;
+                    keys.Add(k);
+                    cmd.Parameters.AddWithValue(k, norm[i]);
+                }
+                sql.AppendLine($"  AND extension IN ({string.Join(", ", keys)})");
+            }
+        }
+
+        sql.AppendLine("ORDER BY bm25(chunks) DESC");
+        sql.AppendLine("LIMIT $lim;");
+
+        cmd.CommandText = sql.ToString();
         cmd.Parameters.AddWithValue("$q", fts);
         cmd.Parameters.AddWithValue("$lim", topN);
 
@@ -719,6 +764,28 @@ internal static class SqliteFtsIndex
         }
 
         return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
+    }
+
+    private static string NormalizePathPrefix(string raw)
+        => raw.Trim().Replace("\\", "/", StringComparison.Ordinal).TrimStart('/');
+
+    private static string EscapeLike(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
+
+    private static List<string> NormalizeExtensionsForFilter(IReadOnlyList<string> raw)
+    {
+        var list = new List<string>(raw.Count);
+        foreach (var s0 in raw)
+        {
+            var s = s0.Trim();
+            if (s.Length == 0)
+                continue;
+            if (!s.StartsWith(".", StringComparison.Ordinal))
+                s = "." + s;
+            s = s.ToLowerInvariant();
+            list.Add(s);
+        }
+        return list;
     }
 
     internal static Task<ExplainHitResponse> ExplainHitAsync(

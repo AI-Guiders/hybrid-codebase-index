@@ -43,11 +43,14 @@ public sealed class CodebaseIndexService
         string workspaceRoot,
         string query,
         int topN = 15,
+        string? pathPrefix = null,
+        IReadOnlyList<string>? excludePathPrefixes = null,
+        IReadOnlyList<string>? extensions = null,
         CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, _indexDirectoryRelative);
-        return SqliteFtsIndex.SearchAsync(root, db, query, topN, cancellationToken);
+        return SqliteFtsIndex.SearchAsync(root, db, query, topN, pathPrefix, excludePathPrefixes, extensions, cancellationToken);
     }
 
     public Task<IndexStatus> GetStatusAsync(string workspaceRoot, CancellationToken cancellationToken = default)
