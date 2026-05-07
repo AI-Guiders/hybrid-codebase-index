@@ -6,7 +6,8 @@ namespace HybridCodebaseIndex.Core;
 
 internal static class SqliteFtsIndex
 {
-    internal const int FormatVersion = 1;
+    // Bump when on-disk schema changes in a non-backward-compatible way.
+    internal const int FormatVersion = 2;
 
     internal static string ResolveDatabasePath(string workspaceRoot, string indexDirectoryRelative)
     {
@@ -26,83 +27,92 @@ internal static class SqliteFtsIndex
         var sw = System.Diagnostics.Stopwatch.StartNew();
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
 
-        if (File.Exists(dbPath))
-            File.Delete(dbPath);
+        // Build into a fresh file if an existing DB is present; do not touch it (it can be in use by readers).
+        // If there is no DB yet, build directly into the final path to avoid extra file moves (more robust on Windows).
+        var hasExisting = File.Exists(dbPath);
+        var tmpPath = hasExisting ? dbPath + ".tmp-" + Guid.NewGuid().ToString("n") : dbPath;
 
         var filesIndexed = 0;
         var skippedLarge = 0;
         var skippedBinary = 0;
 
-        using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
-        conn.Open();
-
-        InitEmptyIndex(conn, workspaceRoot);
-
-        using var tx = conn.BeginTransaction();
-        using var insert = conn.CreateCommand();
-        insert.Transaction = tx;
-        insert.CommandText = """
-            INSERT INTO chunks(path, extension, line_start, line_end, body)
-            VALUES ($path, $ext, $ls, $le, $body);
-            """;
-
-        foreach (var absolute in WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            using var conn = new SqliteConnection($"Data Source={tmpPath};Mode=ReadWriteCreate");
+            conn.Open();
 
-            FileInfo info;
-            try
+            InitEmptyIndex(conn, workspaceRoot);
+
+            using var tx = conn.BeginTransaction();
+            using var insert = conn.CreateCommand();
+            insert.Transaction = tx;
+            insert.CommandText = """
+                INSERT INTO chunks(path, extension, line_start, line_end, body)
+                VALUES ($path, $ext, $ls, $le, $body);
+                """;
+
+            foreach (var absolute in WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot))
             {
-                info = new FileInfo(absolute);
-                if (info.Length > WorkspaceScanner.MaxIndexedFileBytes)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                FileInfo info;
+                try
                 {
-                    skippedLarge++;
+                    info = new FileInfo(absolute);
+                    if (info.Length > WorkspaceScanner.MaxIndexedFileBytes)
+                    {
+                        skippedLarge++;
+                        continue;
+                    }
+                }
+                catch
+                {
                     continue;
                 }
+
+                using var fs = info.OpenRead();
+                var probeSize = (int)Math.Min(8192, info.Length);
+                var probe = new byte[probeSize];
+                var read = fs.ReadAtLeast(probe.AsSpan(0, probeSize), probeSize, throwOnEndOfStream: false);
+                if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
+                {
+                    skippedBinary++;
+                    continue;
+                }
+
+                fs.Position = 0;
+                using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                var text = reader.ReadToEnd();
+
+                var relative = WorkspaceScanner.RelativePath(workspaceRoot, absolute);
+                var ext = Path.GetExtension(absolute);
+                var rel = relative.Replace("\\", "/", StringComparison.Ordinal);
+
+                var chunks = WorkspaceScanner.ChunkByLines(text);
+                var anyChunk = false;
+                foreach (var (lineStart, lineEnd, body) in chunks)
+                {
+                    insert.Parameters.Clear();
+                    insert.Parameters.AddWithValue("$path", rel);
+                    insert.Parameters.AddWithValue("$ext", ext);
+                    insert.Parameters.AddWithValue("$ls", lineStart);
+                    insert.Parameters.AddWithValue("$le", lineEnd);
+                    insert.Parameters.AddWithValue("$body", body);
+                    insert.ExecuteNonQuery();
+                    anyChunk = true;
+                }
+
+                if (anyChunk)
+                    filesIndexed++;
             }
-            catch
-            {
-                continue;
-            }
 
-            using var fs = info.OpenRead();
-            var probeSize = (int)Math.Min(8192, info.Length);
-            var probe = new byte[probeSize];
-            var read = fs.ReadAtLeast(probe.AsSpan(0, probeSize), probeSize, throwOnEndOfStream: false);
-            if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
-            {
-                skippedBinary++;
-                continue;
-            }
-
-            fs.Position = 0;
-            using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            var text = reader.ReadToEnd();
-
-            var relative = WorkspaceScanner.RelativePath(workspaceRoot, absolute);
-            var ext = Path.GetExtension(absolute);
-            var rel = relative.Replace("\\", "/", StringComparison.Ordinal);
-
-            var chunks = WorkspaceScanner.ChunkByLines(text);
-            var anyChunk = false;
-            foreach (var (lineStart, lineEnd, body) in chunks)
-            {
-                insert.Parameters.Clear();
-                insert.Parameters.AddWithValue("$path", rel);
-                insert.Parameters.AddWithValue("$ext", ext);
-                insert.Parameters.AddWithValue("$ls", lineStart);
-                insert.Parameters.AddWithValue("$le", lineEnd);
-                insert.Parameters.AddWithValue("$body", body);
-                insert.ExecuteNonQuery();
-                anyChunk = true;
-            }
-
-            if (anyChunk)
-                filesIndexed++;
+            tx.Commit();
         }
 
-        tx.Commit();
         sw.Stop();
+
+        if (hasExisting)
+            TryReplaceDatabase(tmpPath, dbPath);
+
         return new ReindexSummary(
             FormatVersion,
             dbPath,
@@ -110,6 +120,37 @@ internal static class SqliteFtsIndex
             skippedLarge,
             skippedBinary,
             sw.Elapsed);
+    }
+
+    private static void TryReplaceDatabase(string tmpPath, string dbPath)
+    {
+        // Best-effort: try a few times in case the old DB is momentarily locked.
+        var backup = dbPath + ".bak";
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                if (File.Exists(dbPath))
+                {
+                    File.Replace(tmpPath, dbPath, backup, ignoreMetadataErrors: true);
+                    if (File.Exists(backup))
+                        File.Delete(backup);
+                }
+                else
+                {
+                    File.Move(tmpPath, dbPath);
+                }
+
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(120 * (attempt + 1));
+            }
+        }
+
+        // If replace failed, keep tmp around for inspection.
+        throw new IOException($"Could not replace index DB (in use?): '{dbPath}'. Temporary DB: '{tmpPath}'.");
     }
 
     private static void InitEmptyIndex(SqliteConnection conn, string workspaceRoot)
