@@ -37,10 +37,20 @@ public sealed record IndexSettings(
 
             var dir = Path.GetFullPath(indexDirectory.TrimEnd(Path.DirectorySeparatorChar));
             var path = Path.Combine(dir, "settings.toml");
-            if (!File.Exists(path))
+            string text;
+            if (File.Exists(path))
+            {
+                text = File.ReadAllText(path);
+            }
+            else if (BundledContent.TryReadEmbeddedText("DefaultSettings/settings.default.toml", out var embedded))
+            {
+                text = embedded;
+            }
+            else
+            {
                 return Default;
+            }
 
-            var text = File.ReadAllText(path);
             var model = TomlSerializer.Deserialize<TomlTable>(text);
             if (model is null)
                 return Default;

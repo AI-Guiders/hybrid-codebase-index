@@ -1,0 +1,22 @@
+# Hybrid Codebase Index settings (default, embedded).
+#
+# This file is embedded into the MCP binary so the server has stable defaults
+# even when no workspace override exists.
+#
+# To override per-workspace, create:
+#   <workspace>/.hybrid-codebase-index/settings.toml
+#
+# Keys are snake_case.
+
+# Include *.cs as plain text documents in FTS (Roslyn truth still handles semantics).
+include_cs_in_fts = true
+
+# Optional extra roots (relative to workspace root) to include in indexing.
+extra_include_roots = []
+
+# Optional: full override of indexed extensions (strings without dot are accepted).
+# include_extensions = ["md", "mdx", "csproj", "slnx", "props", "targets", "toml", "editorconfig", "json", "yml", "yaml", "razor", "css", "scss", "html", "axaml", "cs"]
+
+# Optional: subtract from the effective set.
+# exclude_extensions = ["cs"]
+
