@@ -36,7 +36,9 @@ public sealed record IndexStatus(
     string? IndexedAtIso,
     string? WorkspaceRootNormalized,
     string? LastReindexError,
-    string? LastReindexErrorAtIso);
+    string? LastReindexErrorAtIso,
+    string SettingsSource,
+    string? SettingsParseError);
 
 public sealed record ReindexSummary(
     int IndexFormatVersion,

@@ -489,7 +489,14 @@ internal static class SqliteFtsIndex
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         var exists = File.Exists(dbPath);
         if (!exists)
-            return new IndexStatus(FormatVersion, dbPath, false, 0, null, workspaceRoot, null, null);
+        {
+            IndexSettings.TryLoadFromIndexDirectoryWithDiagnostics(
+                Path.GetDirectoryName(dbPath),
+                out _,
+                out var src,
+                out var err);
+            return new IndexStatus(FormatVersion, dbPath, false, 0, null, workspaceRoot, null, null, src, err);
+        }
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
@@ -501,10 +508,16 @@ internal static class SqliteFtsIndex
         var lastErrAt = ReadMeta(conn, "reindex_error_at");
         if (string.IsNullOrWhiteSpace(lastErrAt))
             lastErrAt = null;
+
+        IndexSettings.TryLoadFromIndexDirectoryWithDiagnostics(
+            Path.GetDirectoryName(dbPath),
+            out _,
+            out var settingsSource,
+            out var settingsParseError);
         using var countCmd = conn.CreateCommand();
         countCmd.CommandText = "SELECT count(*) FROM chunks;";
         var docCount = Convert.ToInt32(countCmd.ExecuteScalar() ?? 0);
-        return new IndexStatus(FormatVersion, dbPath, true, docCount, indexedAt, workspaceRoot, lastErr, lastErrAt);
+        return new IndexStatus(FormatVersion, dbPath, true, docCount, indexedAt, workspaceRoot, lastErr, lastErrAt, settingsSource, settingsParseError);
     }
 
     private static string? ReadMeta(SqliteConnection conn, string key)

@@ -30,28 +30,47 @@ public sealed record IndexSettings(
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(indexDirectory))
-                return Default;
+        _ = TryLoadFromIndexDirectoryWithDiagnostics(indexDirectory, out var settings, out _, out _);
+        return settings;
+    }
 
-            var dir = Path.GetFullPath(indexDirectory.TrimEnd(Path.DirectorySeparatorChar));
-            var path = Path.Combine(dir, "settings.toml");
-            var embeddedModel = TryReadEmbeddedModel();
-            var diskModel = File.Exists(path) ? TryReadDiskModel(path) : null;
+    public static bool TryLoadFromIndexDirectoryWithDiagnostics(
+        string? indexDirectory,
+        out IndexSettings settings,
+        out string settingsSource,
+        out string? settingsParseError)
+    {
+        settings = Default;
+        settingsSource = "default";
+        settingsParseError = null;
 
-            // Merge: embedded = base, disk = overlay.
-            var includeCs = ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
-            var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
-            var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
-            var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
+        if (string.IsNullOrWhiteSpace(indexDirectory))
+            return false;
 
-            return new IndexSettings(includeCs, extraRoots, includeExt, excludeExt);
-        }
-        catch
-        {
-            return Default;
-        }
+        var dir = Path.GetFullPath(indexDirectory.TrimEnd(Path.DirectorySeparatorChar));
+        var path = Path.Combine(dir, "settings.toml");
+
+        var embeddedModel = TryReadEmbeddedModel(out var embeddedErr);
+        string? diskErr = null;
+        var diskModel = File.Exists(path) ? TryReadDiskModel(path, out diskErr) : null;
+
+        settingsParseError = diskErr ?? embeddedErr;
+
+        if (embeddedModel is not null && diskModel is not null)
+            settingsSource = "embedded+disk";
+        else if (diskModel is not null)
+            settingsSource = "disk";
+        else if (embeddedModel is not null)
+            settingsSource = "embedded";
+
+        // Merge: embedded = base, disk = overlay.
+        var includeCs = ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
+        var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
+        var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
+        var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
+
+        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt);
+        return true;
     }
 
     public IReadOnlyList<string> GetEffectiveExtensions()
@@ -73,29 +92,33 @@ public sealed record IndexSettings(
         return baseList.Where(e => !deny.Contains(e)).ToArray();
     }
 
-    private static TomlTable? TryReadEmbeddedModel()
+    private static TomlTable? TryReadEmbeddedModel(out string? error)
     {
+        error = null;
         try
         {
             if (!BundledContent.TryReadEmbeddedText("DefaultSettings/settings.default.toml", out var embedded))
                 return null;
             return TomlSerializer.Deserialize<TomlTable>(embedded);
         }
-        catch
+        catch (Exception ex)
         {
+            error = ex.GetType().Name + ": " + ex.Message;
             return null;
         }
     }
 
-    private static TomlTable? TryReadDiskModel(string path)
+    private static TomlTable? TryReadDiskModel(string path, out string? error)
     {
+        error = null;
         try
         {
             var text = File.ReadAllText(path);
             return TomlSerializer.Deserialize<TomlTable>(text);
         }
-        catch
+        catch (Exception ex)
         {
+            error = ex.GetType().Name + ": " + ex.Message;
             return null;
         }
     }

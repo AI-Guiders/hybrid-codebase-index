@@ -106,7 +106,9 @@ internal static class ToolHandlers
             IndexedAtIso: st.IndexedAtIso,
             WorkspaceRoot: st.WorkspaceRootNormalized,
             LastReindexError: st.LastReindexError,
-            LastReindexErrorAtIso: st.LastReindexErrorAtIso);
+            LastReindexErrorAtIso: st.LastReindexErrorAtIso,
+            SettingsSource: st.SettingsSource,
+            SettingsParseError: st.SettingsParseError);
 
         // Keep the contract stable: include nullable fields explicitly.
         return JsonSerializer.Serialize(dto, JsonOutWithNulls);
@@ -189,7 +191,9 @@ internal static class ToolHandlers
         string? IndexedAtIso,
         string? WorkspaceRoot,
         string? LastReindexError,
-        string? LastReindexErrorAtIso);
+        string? LastReindexErrorAtIso,
+        string SettingsSource,
+        string? SettingsParseError);
 
     private sealed record ReindexResultDto(
         int IndexFormatVersion,
