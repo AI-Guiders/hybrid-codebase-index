@@ -14,7 +14,7 @@
 
 ### `codebase_index_search`
 
-Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5, ADR 0105). hit_kind=text_fts. До reindex база может отсутствовать.
+Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5, см. docs/ADR-0105-hybrid-codebase-index-core-and-mcp.md). hit_kind=text_fts. До reindex база может отсутствовать.
 
 ### `codebase_index_explain`
 

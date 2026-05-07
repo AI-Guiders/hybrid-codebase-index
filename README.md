@@ -1,6 +1,6 @@
 # Hybrid Codebase Index (HCI) — MCP
 
-Local hybrid index for “search-before-read” workflows (ADR 0105): fast keyword search (SQLite FTS5) over docs/config/web/axaml (and optionally `*.cs` as plain text), while **semantic correctness stays in Roslyn** (rename/usages/diagnostics).
+Local hybrid index for “search-before-read” workflows (**[ADR 0105](docs/ADR-0105-hybrid-codebase-index-core-and-mcp.md)**): fast keyword search (SQLite FTS5) over docs/config/web/axaml (and optionally `*.cs` as plain text), while **semantic correctness stays in Roslyn** (rename/usages/diagnostics).
 
 ## What you get
 
