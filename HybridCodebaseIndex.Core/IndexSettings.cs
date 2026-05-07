@@ -10,24 +10,12 @@ public sealed record IndexSettings(
     IReadOnlyList<string>? ExcludeExtensions,
     IReadOnlyList<string> ExcludePathSegments)
 {
-    internal static readonly IReadOnlyList<string> DefaultExcludePathSegments =
-    [
-        "bin",
-        "obj",
-        ".git",
-        "node_modules",
-        ".vs",
-        ".idea",
-        ".cache",
-        ".cascade-ide",
-    ];
-
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
         ExtraIncludeRoots: [],
         IncludeExtensions: null,
         ExcludeExtensions: null,
-        ExcludePathSegments: DefaultExcludePathSegments);
+        ExcludePathSegments: []);
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
@@ -69,7 +57,7 @@ public sealed record IndexSettings(
         var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
         var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
         var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
-        var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? Default.ExcludePathSegments.ToList();
+        var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
 
         settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments);
         return true;
