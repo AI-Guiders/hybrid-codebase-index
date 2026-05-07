@@ -23,11 +23,6 @@ internal static class WorkspaceScanner
         }
     }
 
-    internal static bool ShouldExcludePath(string fullPath)
-    {
-        return false;
-    }
-
     internal static bool ShouldExcludePath(string fullPath, IReadOnlyList<string> excludePathSegments)
     {
         if (excludePathSegments.Count == 0)
