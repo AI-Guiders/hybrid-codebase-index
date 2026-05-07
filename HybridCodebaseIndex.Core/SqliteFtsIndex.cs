@@ -54,8 +54,8 @@ internal static class SqliteFtsIndex
 
             var candidates = WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot).ToList();
 
-            // Optional: respect .gitignore via `git check-ignore` if git is available.
-            var relCandidates = new List<string>(capacity: candidates.Count);
+            var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot);
+
             foreach (var absolute in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -66,11 +66,7 @@ internal static class SqliteFtsIndex
                     AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
                     continue;
                 }
-
-                relCandidates.Add(WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal));
             }
-
-            var ignoredByGit = GitCheckIgnore.GetIgnoredRelativePathsOrEmpty(workspaceRoot, relCandidates);
 
             foreach (var absolute in candidates)
             {
@@ -80,7 +76,7 @@ internal static class SqliteFtsIndex
                     continue;
 
                 var rel = WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal);
-                if (ignoredByGit.Contains(rel))
+                if (GitIgnoreRules.IsIgnored(gitIgnore, rel))
                 {
                     skippedExcluded++;
                     AddSample(skippedSample, rel, "gitignore");
