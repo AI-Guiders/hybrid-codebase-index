@@ -92,6 +92,24 @@ internal static class ToolCatalog
                     required = RequiredWorkspace,
                 }),
             },
+            new Tool
+            {
+                Name = "codebase_index_watch",
+                Description =
+                    "Включить/выключить watcher для авто-инкрементальной индексации (debounced). Важно: это best-effort фоновая синхронизация, не заменяет явный reindex.",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Определяет область watcher (одна БД на (workspace_root, solution_path))." },
+                        enabled = new { type = "boolean", description = "true — включить watcher, false — выключить." },
+                        debounce_ms = new { type = "integer", description = "Опционально: debounce в миллисекундах (по умолчанию 750)." },
+                    },
+                    required = new[] { "workspace_path", "enabled" },
+                }),
+            },
         ];
     }
 }

@@ -28,5 +28,9 @@ Explain для одного попадания (по hit_id из search): вер
 
 Перестройка индекса (FTS5). По умолчанию инкрементальная по файлам; full_rebuild=true — полная.
 
+### `codebase_index_watch`
+
+Включить/выключить watcher для авто-инкрементальной индексации (debounced). Важно: это best-effort фоновая синхронизация, не заменяет явный reindex.
+
 <!-- GENERATED:ToolCatalog END -->
 

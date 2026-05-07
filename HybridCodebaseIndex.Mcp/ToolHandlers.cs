@@ -9,6 +9,7 @@ namespace HybridCodebaseIndex.Mcp;
 internal static class ToolHandlers
 {
     private static readonly CodebaseIndexService Service = new();
+    private static readonly IndexWatchManager Watchers = new(Service);
 
     private static readonly JsonSerializerOptions JsonOut = new()
     {
@@ -34,6 +35,7 @@ internal static class ToolHandlers
             "codebase_index_explain" => HandleExplain(args),
             "codebase_index_status" => HandleStatus(args),
             "codebase_index_reindex" => HandleReindex(args),
+            "codebase_index_watch" => HandleWatch(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
     }
@@ -158,6 +160,28 @@ internal static class ToolHandlers
             DurationMs: (long)summary.Duration.TotalMilliseconds);
 
         return JsonSerializer.Serialize(dto, JsonOut);
+    }
+
+    private static string HandleWatch(IReadOnlyDictionary<string, JsonElement> args)
+    {
+        var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
+        var enabled = OptionalBool(args, "enabled") ?? false;
+        var debounceMs = OptionalInt(args, "debounce_ms") ?? 750;
+        if (debounceMs < 50)
+            debounceMs = 50;
+        if (debounceMs > 60_000)
+            debounceMs = 60_000;
+
+        Watchers.SetEnabled(ws, sln, enabled, debounceMs);
+
+        return JsonSerializer.Serialize(new
+        {
+            workspacePath = ws,
+            solutionPath = sln,
+            enabled,
+            debounceMs,
+        }, JsonOut);
     }
 
     private static string RequireString(IReadOnlyDictionary<string, JsonElement> args, string key)
