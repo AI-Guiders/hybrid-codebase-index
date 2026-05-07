@@ -33,7 +33,16 @@ try {
         New-Item -ItemType Directory -Path $Target -Force | Out-Null
     }
 
-    robocopy $outDir $Target /E /MIR /NFL /NDL /NJH /NJS | Out-Null
+    # If Cursor is currently running the MCP from $Target, files can be locked (clrjit.dll, etc.).
+    # Best-effort: stop the running process before mirroring.
+    try {
+        Get-Process -Name "HybridCodebaseIndex.Mcp" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 300
+    } catch {
+        # ignore
+    }
+
+    robocopy $outDir $Target /E /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS | Out-Null
     $robocode = $LASTEXITCODE
     if ($robocode -ge 8) {
         Write-Error "robocopy failed with exit code $robocode"
