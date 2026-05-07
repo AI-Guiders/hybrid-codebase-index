@@ -39,7 +39,7 @@ public sealed record IndexSettings(
                 return Default;
 
             var text = File.ReadAllText(path);
-            var model = Toml.ToModel(text) as TomlTable;
+            var model = TomlSerializer.Deserialize<TomlTable>(text);
             if (model is null)
                 return Default;
 
