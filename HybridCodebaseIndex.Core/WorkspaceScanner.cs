@@ -25,19 +25,23 @@ internal static class WorkspaceScanner
 
     internal static bool ShouldExcludePath(string fullPath)
     {
-        // Нормализуем для сравнения сегментов пути.
-        foreach (var token in new[]
-                 {
-                     $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}.vs{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}.idea{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}.cache{Path.DirectorySeparatorChar}",
-                     $"{Path.DirectorySeparatorChar}.cascade-ide{Path.DirectorySeparatorChar}",
-                 })
+        return ShouldExcludePath(fullPath, IndexSettings.DefaultExcludePathSegments);
+    }
+
+    internal static bool ShouldExcludePath(string fullPath, IReadOnlyList<string> excludePathSegments)
+    {
+        if (excludePathSegments.Count == 0)
+            return false;
+
+        // Normalize for segment matching.
+        // Use directory separators to avoid accidental substring matches.
+        foreach (var seg0 in excludePathSegments)
         {
+            var seg = seg0?.Trim();
+            if (string.IsNullOrEmpty(seg))
+                continue;
+
+            var token = $"{Path.DirectorySeparatorChar}{seg}{Path.DirectorySeparatorChar}";
             if (fullPath.Contains(token, StringComparison.OrdinalIgnoreCase))
                 return true;
         }

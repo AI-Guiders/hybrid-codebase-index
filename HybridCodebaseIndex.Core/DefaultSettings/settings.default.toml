@@ -20,3 +20,6 @@ include_extensions = ["md", "mdx", "csproj", "slnx", "props", "targets", "toml",
 # Optional: subtract from the effective set.
 # exclude_extensions = ["cs"]
 
+# Built-in path denylist (applied before gitignore). List of directory names (path segments).
+exclude_path_segments = ["bin", "obj", ".git", "node_modules", ".vs", ".idea", ".cache", ".cascade-ide"]
+

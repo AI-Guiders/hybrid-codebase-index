@@ -142,7 +142,7 @@ internal static class SqliteFtsIndex
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (WorkspaceScanner.ShouldExcludePath(absolute))
+                if (WorkspaceScanner.ShouldExcludePath(absolute, settings.ExcludePathSegments))
                 {
                     skippedExcluded++;
                     AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
@@ -154,7 +154,7 @@ internal static class SqliteFtsIndex
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (WorkspaceScanner.ShouldExcludePath(absolute))
+                if (WorkspaceScanner.ShouldExcludePath(absolute, settings.ExcludePathSegments))
                     continue;
 
                 var rel = WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal);
