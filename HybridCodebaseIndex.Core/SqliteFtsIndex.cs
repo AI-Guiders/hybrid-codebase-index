@@ -43,6 +43,7 @@ internal static class SqliteFtsIndex
         try
         {
             var settings = IndexSettings.TryLoad(workspaceRoot, ".cascade-ide/hybrid-codebase-index");
+            var extensions = settings.GetEffectiveExtensions();
 
             // Prepare a fresh FTS table for the new build.
             Exec(conn, "DROP TABLE IF EXISTS chunks_new;");
@@ -75,7 +76,7 @@ internal static class SqliteFtsIndex
 
             var candidates = new List<string>(capacity: 8192);
             foreach (var root in roots)
-                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, settings.IncludeCsInFts));
+                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extensions));
 
             var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot);
 
