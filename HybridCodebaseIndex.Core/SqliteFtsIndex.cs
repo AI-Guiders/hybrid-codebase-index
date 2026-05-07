@@ -136,7 +136,7 @@ internal static class SqliteFtsIndex
             foreach (var root in roots)
                 candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extensions));
 
-            var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot);
+            var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot, settings.IgnoreFiles);
 
             foreach (var absolute in candidates)
             {

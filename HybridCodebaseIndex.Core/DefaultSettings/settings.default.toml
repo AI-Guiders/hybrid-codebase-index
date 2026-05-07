@@ -23,3 +23,7 @@ include_extensions = ["md", "mdx", "csproj", "slnx", "props", "targets", "toml",
 # Built-in path denylist (applied before gitignore). List of directory names (path segments).
 exclude_path_segments = ["bin", "obj", ".git", "node_modules", ".vs", ".idea", ".cache", ".cascade-ide"]
 
+# Which gitignore-like files are applied (relative to workspace root).
+# Use workspace override settings.toml to add env-specific ignores (e.g. ".cursorignore").
+ignore_files = [".gitignore", ".git/info/exclude", ".cascadeideignore"]
+

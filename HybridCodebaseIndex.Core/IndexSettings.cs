@@ -8,14 +8,16 @@ public sealed record IndexSettings(
     IReadOnlyList<string> ExtraIncludeRoots,
     IReadOnlyList<string>? IncludeExtensions,
     IReadOnlyList<string>? ExcludeExtensions,
-    IReadOnlyList<string> ExcludePathSegments)
+    IReadOnlyList<string> ExcludePathSegments,
+    IReadOnlyList<string> IgnoreFiles)
 {
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
         ExtraIncludeRoots: [],
         IncludeExtensions: null,
         ExcludeExtensions: null,
-        ExcludePathSegments: []);
+        ExcludePathSegments: [],
+        IgnoreFiles: []);
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
@@ -58,8 +60,9 @@ public sealed record IndexSettings(
         var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
         var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
         var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
+        var ignoreFiles = ReadStringArray(diskModel, embeddedModel, "ignore_files") ?? [];
 
-        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments);
+        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments, ignoreFiles);
         return true;
     }
 
