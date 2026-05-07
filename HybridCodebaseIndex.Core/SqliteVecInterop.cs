@@ -13,9 +13,9 @@ internal static class SqliteVecInterop
         if (raw.Length == 0)
             return false;
 
-        var extPath = raw;
-        if (!Path.IsPathRooted(extPath))
-            extPath = Path.Combine(indexDirectory, extPath);
+        var extPath = ResolveExtensionPath(raw, indexDirectory);
+        if (extPath is null)
+            return false;
 
         try
         {
@@ -32,6 +32,22 @@ internal static class SqliteVecInterop
         {
             try { conn.EnableExtensions(false); } catch { /* ignore */ }
         }
+    }
+
+    /// <summary>
+    /// Absolute path as-is if it exists; otherwise relative to index directory, then to <see cref="AppContext.BaseDirectory"/> (published MCP host).
+    /// </summary>
+    private static string? ResolveExtensionPath(string raw, string indexDirectory)
+    {
+        if (Path.IsPathRooted(raw))
+            return File.Exists(raw) ? raw : null;
+
+        var inIndex = Path.Combine(indexDirectory, raw);
+        if (File.Exists(inIndex))
+            return inIndex;
+
+        var inBase = Path.Combine(AppContext.BaseDirectory, raw);
+        return File.Exists(inBase) ? inBase : null;
     }
 
     internal static bool TryEnsureVecChunksTable(SqliteConnection conn, int dim, out string? error)
