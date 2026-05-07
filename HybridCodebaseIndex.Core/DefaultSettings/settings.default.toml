@@ -64,6 +64,10 @@ embedding_vocab_path = ""
 # ONNX provider: whether to lowercase in BasicTokenizer step.
 embedding_do_lower_case = true
 
+# sqlite-vec: optional loadable extension path (absolute or relative to index dir).
+# If set and load succeeds, hybrid search uses sqlite-vec KNN instead of C# brute-force.
+sqlite_vec_extension_path = ""
+
 # For token-based models: sequence length (0 = provider default, typically 128..256).
 embedding_sequence_length = 0
 

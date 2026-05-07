@@ -22,6 +22,7 @@ public sealed record IndexSettings(
     string? EmbeddingModelPath,
     string? EmbeddingVocabPath,
     bool EmbeddingDoLowerCase,
+    string? SqliteVecExtensionPath,
     int EmbeddingSequenceLength,
     bool EmbeddingPreferGpu)
 {
@@ -44,6 +45,7 @@ public sealed record IndexSettings(
         EmbeddingModelPath: null,
         EmbeddingVocabPath: null,
         EmbeddingDoLowerCase: true,
+        SqliteVecExtensionPath: null,
         EmbeddingSequenceLength: 0,
         EmbeddingPreferGpu: true);
 
@@ -104,6 +106,7 @@ public sealed record IndexSettings(
         var embeddingModelPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_model_path") ?? ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
         var embeddingVocabPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_vocab_path") ?? ReadString(diskModel, embeddedModel, "embedding_vocab_path") ?? Default.EmbeddingVocabPath;
         var embeddingDoLowerCase = ReadBool(diskModel, embeddedModel, "semantic", "embedding_do_lower_case") ?? ReadBool(diskModel, embeddedModel, "embedding_do_lower_case") ?? Default.EmbeddingDoLowerCase;
+        var sqliteVecExtensionPath = ReadString(diskModel, embeddedModel, "semantic", "sqlite_vec_extension_path") ?? ReadString(diskModel, embeddedModel, "sqlite_vec_extension_path") ?? Default.SqliteVecExtensionPath;
         var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "semantic", "embedding_sequence_length") ?? ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
         var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "semantic", "embedding_prefer_gpu") ?? ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
 
@@ -126,6 +129,7 @@ public sealed record IndexSettings(
             embeddingModelPath,
             embeddingVocabPath,
             embeddingDoLowerCase,
+            sqliteVecExtensionPath,
             embeddingSeqLen,
             embeddingPreferGpu);
         return true;

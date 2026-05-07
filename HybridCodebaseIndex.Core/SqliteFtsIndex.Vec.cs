@@ -49,6 +49,10 @@ internal static partial class SqliteFtsIndex
         var provider = EmbeddingProviderFactory.Create(settings, Path.GetDirectoryName(dbPath));
         var dim = provider.Dimension;
 
+        var indexDir = Path.GetDirectoryName(dbPath)!;
+        var sqliteVecAvailable = SqliteVecInterop.TryEnableAndLoad(conn, settings, indexDir, out _)
+            && SqliteVecInterop.TryEnsureVecChunksTable(conn, dim, out _);
+
         using var select = conn.CreateCommand();
         select.CommandText = "SELECT rowid, substr(body, 1, 4000) FROM chunks;";
 
@@ -87,6 +91,10 @@ internal static partial class SqliteFtsIndex
             upsert.Parameters.AddWithValue("$vec", blob);
             upsert.Parameters.AddWithValue("$t", nowTicks);
             upsert.ExecuteNonQuery();
+
+            if (sqliteVecAvailable)
+                _ = SqliteVecInterop.TryUpsertVector(conn, id, emb, out _);
+
             count++;
         }
 

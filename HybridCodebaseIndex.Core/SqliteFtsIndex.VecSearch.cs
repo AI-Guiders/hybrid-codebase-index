@@ -49,8 +49,8 @@ internal static partial class SqliteFtsIndex
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
 
-        // If vectors table missing, just return FTS.
-        if (!TableExists(conn, "vectors"))
+        // If vec backend missing, just return FTS.
+        if (!TableExists(conn, "vectors") && !TableExists(conn, "vec_chunks"))
             return (ftsResp, null);
 
         var settings = IndexSettings.TryLoadFromIndexDirectory(Path.GetDirectoryName(dbPath)!);
@@ -65,7 +65,14 @@ internal static partial class SqliteFtsIndex
 
         vecTopK = Math.Clamp(vecTopK, 5, 200);
 
-        var vecHits = VecTopK(conn, qv, qn, vecTopK);
+        var indexDir = Path.GetDirectoryName(dbPath)!;
+        var sqliteVecLoaded = SqliteVecInterop.TryEnableAndLoad(conn, settings, indexDir, out _);
+        var vecHits =
+            sqliteVecLoaded && TableExists(conn, "vec_chunks")
+                ? SqliteVecInterop.QueryTopK(conn, qv, vecTopK)
+                : TableExists(conn, "vectors")
+                    ? VecTopK(conn, qv, qn, vecTopK)
+                    : [];
 
         // Merge by hitId (chunk rowid)
         var merged = new Dictionary<long, IndexHit>();
