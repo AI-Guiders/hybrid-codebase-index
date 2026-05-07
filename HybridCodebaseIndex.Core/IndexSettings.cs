@@ -28,12 +28,14 @@ public sealed record IndexSettings(
         ".cs",
     ];
 
-    public static IndexSettings TryLoad(string workspaceRoot, string indexDirectoryRelative)
+    public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
         try
         {
-            var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
-            var dir = Path.Combine(root, indexDirectoryRelative.TrimStart(Path.DirectorySeparatorChar, '/'));
+            if (string.IsNullOrWhiteSpace(indexDirectory))
+                return Default;
+
+            var dir = Path.GetFullPath(indexDirectory.TrimEnd(Path.DirectorySeparatorChar));
             var path = Path.Combine(dir, "settings.toml");
             if (!File.Exists(path))
                 return Default;

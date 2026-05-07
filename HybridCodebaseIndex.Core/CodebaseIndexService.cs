@@ -5,10 +5,10 @@ public sealed class CodebaseIndexService
 {
     private readonly string _indexDirectoryRelative;
 
-    public CodebaseIndexService(string indexDirectoryRelative = ".cascade-ide/hybrid-codebase-index")
+    public CodebaseIndexService(string indexDirectoryRelative = ".hybrid-codebase-index")
     {
         _indexDirectoryRelative = string.IsNullOrWhiteSpace(indexDirectoryRelative)
-            ? ".cascade-ide/hybrid-codebase-index"
+            ? ".hybrid-codebase-index"
             : indexDirectoryRelative;
     }
 

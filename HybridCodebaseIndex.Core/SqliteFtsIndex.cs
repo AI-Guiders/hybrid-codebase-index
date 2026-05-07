@@ -11,9 +11,17 @@ internal static class SqliteFtsIndex
 
     internal static string ResolveDatabasePath(string workspaceRoot, string indexDirectoryRelative)
     {
-        var dir = Path.Combine(workspaceRoot, indexDirectoryRelative.TrimStart(Path.DirectorySeparatorChar, '/'));
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, $"codebase-index-v{FormatVersion}.sqlite");
+        var requestedDir = Path.Combine(workspaceRoot, indexDirectoryRelative.TrimStart(Path.DirectorySeparatorChar, '/'));
+        var requestedDb = Path.Combine(requestedDir, $"codebase-index-v{FormatVersion}.sqlite");
+
+        // Back-compat: if caller uses the new default but the old location already exists, keep using it.
+        var legacyDir = Path.Combine(workspaceRoot, ".cascade-ide", "hybrid-codebase-index");
+        var legacyDb = Path.Combine(legacyDir, $"codebase-index-v{FormatVersion}.sqlite");
+        if (!File.Exists(requestedDb) && File.Exists(legacyDb))
+            return legacyDb;
+
+        Directory.CreateDirectory(requestedDir);
+        return requestedDb;
     }
 
     internal static Task<ReindexSummary> FullRebuildAsync(
@@ -42,7 +50,7 @@ internal static class SqliteFtsIndex
 
         try
         {
-            var settings = IndexSettings.TryLoad(workspaceRoot, ".cascade-ide/hybrid-codebase-index");
+            var settings = IndexSettings.TryLoadFromIndexDirectory(Path.GetDirectoryName(dbPath)!);
             var extensions = settings.GetEffectiveExtensions();
 
             // Prepare a fresh FTS table for the new build.
