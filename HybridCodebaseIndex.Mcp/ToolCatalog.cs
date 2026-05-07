@@ -35,6 +35,7 @@ internal static class ToolCatalog
                     properties = new
                     {
                         workspace_path = new { type = "string", description = "Корень workspace (решение/репозиторий)." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Используется для области индекса: одна БД на (workspace_root, solution_path)." },
                         query = new { type = "string", description = "Поисковая строка (ключевые слова, AND по токенам)." },
                         top_n = new { type = "integer", description = "Максимум попаданий (по умолчанию 15)." },
                         path_prefix = new { type = "string", description = "Опционально: ограничить попадания путями, начинающимися с префикса (unix-style, например 'src/')." },
@@ -54,6 +55,7 @@ internal static class ToolCatalog
                     properties = new
                     {
                         workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Должен совпадать со scope при search, иначе hit_id может не найтись." },
                         hit_id = new { type = "integer", description = "Идентификатор попадания (hitId из search)." },
                     },
                     required = new[] { "workspace_path", "hit_id" },
@@ -69,6 +71,7 @@ internal static class ToolCatalog
                     properties = new
                     {
                         workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Используется для области индекса: одна БД на (workspace_root, solution_path)." },
                     },
                     required = RequiredWorkspace,
                 }),
@@ -83,6 +86,7 @@ internal static class ToolCatalog
                     properties = new
                     {
                         workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Используется для области индекса: одна БД на (workspace_root, solution_path)." },
                         full_rebuild = new { type = "boolean", description = "Если true — полный rebuild вместо инкремента." },
                     },
                     required = RequiredWorkspace,

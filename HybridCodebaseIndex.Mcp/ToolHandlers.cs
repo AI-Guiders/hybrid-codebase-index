@@ -59,6 +59,7 @@ internal static class ToolHandlers
     private static string HandleSearch(IReadOnlyDictionary<string, JsonElement> args)
     {
         var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
         var q = RequireString(args, "query");
         var topN = OptionalInt(args, "top_n") ?? 15;
         if (topN < 1)
@@ -70,7 +71,7 @@ internal static class ToolHandlers
         var excludePrefixes = OptionalStringArray(args, "exclude_path_prefixes");
         var extensions = OptionalStringArray(args, "extensions");
 
-        var (response, err) = Service.SearchAsync(ws, q, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
+        var (response, err) = Service.SearchAsync(ws, sln, q, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
         var dto = new SearchResultDto(
             Err: err,
             IndexFormatVersion: response.IndexFormatVersion,
@@ -84,9 +85,10 @@ internal static class ToolHandlers
     private static string HandleExplain(IReadOnlyDictionary<string, JsonElement> args)
     {
         var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
         var hitId = RequireLong(args, "hit_id");
 
-        var resp = Service.ExplainHitAsync(ws, hitId).GetAwaiter().GetResult();
+        var resp = Service.ExplainHitAsync(ws, sln, hitId).GetAwaiter().GetResult();
         var dto = new ExplainResultDto(
             Err: resp.Err,
             IndexFormatVersion: resp.IndexFormatVersion,
@@ -101,7 +103,8 @@ internal static class ToolHandlers
     private static string HandleStatus(IReadOnlyDictionary<string, JsonElement> args)
     {
         var ws = RequireString(args, "workspace_path");
-        var st = Service.GetStatusAsync(ws).GetAwaiter().GetResult();
+        var sln = OptionalString(args, "solution_path");
+        var st = Service.GetStatusAsync(ws, sln).GetAwaiter().GetResult();
         var dto = new StatusResultDto(
             IndexFormatVersion: st.IndexFormatVersion,
             DatabasePath: st.DatabasePath,
@@ -137,10 +140,11 @@ internal static class ToolHandlers
     private static string HandleReindex(IReadOnlyDictionary<string, JsonElement> args)
     {
         var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
         var full = OptionalBool(args, "full_rebuild") ?? false;
         var summary = full
-            ? Service.FullRebuildAsync(ws).GetAwaiter().GetResult()
-            : Service.FullReindexAsync(ws).GetAwaiter().GetResult();
+            ? Service.FullRebuildAsync(ws, sln).GetAwaiter().GetResult()
+            : Service.FullReindexAsync(ws, sln).GetAwaiter().GetResult();
         var dto = new ReindexResultDto(
             IndexFormatVersion: summary.IndexFormatVersion,
             DatabasePath: summary.DatabasePath,
