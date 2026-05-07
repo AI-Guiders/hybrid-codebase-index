@@ -1,0 +1,11 @@
+# Build outputs
+**/bin/
+**/obj/
+# Publish output (local)
+publish/
+# Rider/VS
+.idea/
+.vs/
+# OS
+.DS_Store
+Thumbs.db
