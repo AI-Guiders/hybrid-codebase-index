@@ -1,9 +1,187 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace HybridCodebaseIndex.Core;
 
 internal static partial class SqliteFtsIndex
 {
+    private static string BuildArtifactAugmentationHeader(
+        string workspaceRootNormalized,
+        string absolutePath,
+        string relPathUnix,
+        string ext,
+        string text)
+    {
+        // Keep this cheap and best-effort: it must never break indexing.
+        // The goal is to improve searchability for Razor/AXAML without adding a full parser.
+        try
+        {
+            ext = ext.ToLowerInvariant();
+            if (ext is not ".razor" and not ".axaml" and not ".cs")
+                return "";
+
+            var sb = new StringBuilder(capacity: 512);
+
+            // Pairing: .razor <-> .razor.cs, .axaml <-> .axaml.cs
+            if (ext is ".razor" or ".axaml")
+            {
+                var codeBehind = absolutePath + ".cs";
+                if (File.Exists(codeBehind))
+                {
+                    var rel = WorkspaceScanner.RelativePath(workspaceRootNormalized, codeBehind).Replace("\\", "/", StringComparison.Ordinal);
+                    sb.Append("__hci_pair:");
+                    sb.Append(rel);
+                    sb.AppendLine();
+                }
+            }
+            else if (ext == ".cs")
+            {
+                if (absolutePath.EndsWith(".razor.cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    var razor = absolutePath[..^3]; // drop ".cs"
+                    if (File.Exists(razor))
+                    {
+                        var rel = WorkspaceScanner.RelativePath(workspaceRootNormalized, razor).Replace("\\", "/", StringComparison.Ordinal);
+                        sb.Append("__hci_pair:");
+                        sb.Append(rel);
+                        sb.AppendLine();
+                    }
+                }
+                else if (absolutePath.EndsWith(".axaml.cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    var axaml = absolutePath[..^3]; // drop ".cs"
+                    if (File.Exists(axaml))
+                    {
+                        var rel = WorkspaceScanner.RelativePath(workspaceRootNormalized, axaml).Replace("\\", "/", StringComparison.Ordinal);
+                        sb.Append("__hci_pair:");
+                        sb.Append(rel);
+                        sb.AppendLine();
+                    }
+                }
+            }
+
+            if (ext == ".razor")
+            {
+                sb.AppendLine("__hci_kind:razor");
+
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@page\s+(?<route>.+?)\s*$"))
+                {
+                    var route = m.Groups["route"].Value.Trim().Trim('"', '\'');
+                    if (route.Length > 0)
+                    {
+                        sb.Append("__hci_page:");
+                        sb.Append(route);
+                        sb.AppendLine();
+                    }
+                }
+
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@inject\s+(?<type>\S+)\s+(?<name>\S+)\s*$"))
+                {
+                    var type = m.Groups["type"].Value.Trim();
+                    var name = m.Groups["name"].Value.Trim();
+                    if (type.Length > 0 && name.Length > 0)
+                    {
+                        sb.Append("__hci_inject:");
+                        sb.Append(type);
+                        sb.Append(' ');
+                        sb.Append(name);
+                        sb.AppendLine();
+                    }
+                }
+
+                var comps = new HashSet<string>(StringComparer.Ordinal);
+                foreach (Match m in Regex.Matches(text, @"<(?<tag>[A-Z][A-Za-z0-9_\.]+)\b"))
+                {
+                    var tag = m.Groups["tag"].Value;
+                    if (tag.Length > 0)
+                        comps.Add(tag);
+                    if (comps.Count >= 50)
+                        break;
+                }
+
+                foreach (var c in comps)
+                {
+                    sb.Append("__hci_component:");
+                    sb.Append(c);
+                    sb.AppendLine();
+                }
+            }
+
+            if (ext == ".axaml")
+            {
+                sb.AppendLine("__hci_kind:axaml");
+
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Match m in Regex.Matches(text, @"\bx:Name\s*=\s*""(?<n>[^""]+)"""))
+                {
+                    var n = m.Groups["n"].Value.Trim();
+                    if (n.Length > 0)
+                        names.Add(n);
+                    if (names.Count >= 80)
+                        break;
+                }
+
+                foreach (var n in names)
+                {
+                    sb.Append("__hci_xname:");
+                    sb.Append(n);
+                    sb.AppendLine();
+                }
+
+                var binds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Match m in Regex.Matches(text, @"\{Binding\s+(?<p>[^}\s,]+)"))
+                {
+                    var p = m.Groups["p"].Value.Trim();
+                    if (p.Length > 0)
+                        binds.Add(p);
+                    if (binds.Count >= 80)
+                        break;
+                }
+
+                foreach (var b in binds)
+                {
+                    sb.Append("__hci_binding:");
+                    sb.Append(b);
+                    sb.AppendLine();
+                }
+
+                foreach (Match m in Regex.Matches(text, @"\bClasses\s*=\s*""(?<c>[^""]+)"""))
+                {
+                    var cls = m.Groups["c"].Value.Trim();
+                    if (cls.Length > 0)
+                    {
+                        sb.Append("__hci_classes:");
+                        sb.Append(cls);
+                        sb.AppendLine();
+                    }
+                }
+
+                foreach (Match m in Regex.Matches(text, @"avares:[^\s""']+"))
+                {
+                    var uri = m.Value.Trim();
+                    if (uri.Length > 0)
+                    {
+                        sb.Append("__hci_avares:");
+                        sb.Append(uri);
+                        sb.AppendLine();
+                    }
+                }
+            }
+
+            if (sb.Length == 0)
+                return "";
+
+            // Separate header from original content, so snippets remain readable.
+            sb.AppendLine();
+            return sb.ToString();
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     private static bool IsFileChanged(SqliteConnection conn, SqliteTransaction tx, string path, long sizeBytes, long lastWriteUtcTicks)
     {
         using var cmd = conn.CreateCommand();

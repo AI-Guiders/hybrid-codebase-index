@@ -133,11 +133,13 @@ internal static partial class SqliteFtsIndex
                 DeleteChunksForPath(conn, tx, rel);
 
                 var ext = Path.GetExtension(absolute);
+                var header = BuildArtifactAugmentationHeader(workspaceRoot, absolute, rel, ext, text);
                 var chunks = WorkspaceScanner.ChunkByLines(text, chunkLines, overlapLines);
                 var anyChunk = false;
                 foreach (var (lineStart, lineEnd, body) in chunks)
                 {
-                    InsertChunk(conn, tx, rel, ext, lineStart, lineEnd, body);
+                    var augmentedBody = lineStart == 1 && header.Length > 0 ? header + body : body;
+                    InsertChunk(conn, tx, rel, ext, lineStart, lineEnd, augmentedBody);
                     anyChunk = true;
                 }
 

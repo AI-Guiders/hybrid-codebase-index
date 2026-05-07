@@ -149,17 +149,19 @@ internal static partial class SqliteFtsIndex
                 var text = reader.ReadToEnd();
 
                 var ext = Path.GetExtension(absolute);
+                var header = BuildArtifactAugmentationHeader(workspaceRoot, absolute, rel, ext, text);
 
                 var chunks = WorkspaceScanner.ChunkByLines(text, chunkLines, overlapLines);
                 var anyChunk = false;
                 foreach (var (lineStart, lineEnd, body) in chunks)
                 {
+                    var augmentedBody = lineStart == 1 && header.Length > 0 ? header + body : body;
                     insert.Parameters.Clear();
                     insert.Parameters.AddWithValue("$path", rel);
                     insert.Parameters.AddWithValue("$ext", ext);
                     insert.Parameters.AddWithValue("$ls", lineStart);
                     insert.Parameters.AddWithValue("$le", lineEnd);
-                    insert.Parameters.AddWithValue("$body", body);
+                    insert.Parameters.AddWithValue("$body", augmentedBody);
                     insert.ExecuteNonQuery();
                     anyChunk = true;
                 }
