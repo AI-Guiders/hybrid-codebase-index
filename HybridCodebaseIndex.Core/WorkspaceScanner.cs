@@ -8,20 +8,13 @@ internal static class WorkspaceScanner
     internal const int ChunkLines = 110;
     internal const int ChunkOverlapLines = 15;
 
-    private static readonly string[] IndexableGlobExtensions =
-    [
-        ".md", ".mdx", ".csproj", ".slnx", ".props", ".targets", ".toml",
-        ".editorconfig", ".json", ".yml", ".yaml", ".cs", ".razor",
-        ".css", ".scss", ".html", ".axaml",
-    ];
-
-    internal static IEnumerable<string> EnumerateIndexableFiles(string workspaceRoot)
+    internal static IEnumerable<string> EnumerateIndexableFiles(string workspaceRoot, bool includeCsInFts)
     {
         var normalized = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         if (!Directory.Exists(normalized))
             yield break;
 
-        foreach (var ext in IndexableGlobExtensions)
+        foreach (var ext in GetIndexableGlobExtensions(includeCsInFts))
         {
             foreach (var file in Directory.EnumerateFiles(normalized, $"*{ext}", SearchOption.AllDirectories))
             {
@@ -29,6 +22,15 @@ internal static class WorkspaceScanner
             }
         }
     }
+
+    private static string[] GetIndexableGlobExtensions(bool includeCsInFts)
+        => includeCsInFts
+            ? [".md", ".mdx", ".csproj", ".slnx", ".props", ".targets", ".toml",
+                ".editorconfig", ".json", ".yml", ".yaml", ".cs", ".razor",
+                ".css", ".scss", ".html", ".axaml"]
+            : [".md", ".mdx", ".csproj", ".slnx", ".props", ".targets", ".toml",
+                ".editorconfig", ".json", ".yml", ".yaml", ".razor",
+                ".css", ".scss", ".html", ".axaml"];
 
     internal static bool ShouldExcludePath(string fullPath)
     {
