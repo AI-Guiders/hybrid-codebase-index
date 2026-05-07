@@ -4,10 +4,6 @@ using System.Text;
 
 internal static class WorkspaceScanner
 {
-    internal const long MaxIndexedFileBytes = 512 * 1024;
-    internal const int ChunkLines = 110;
-    internal const int ChunkOverlapLines = 15;
-
     internal static IEnumerable<string> EnumerateIndexableFiles(string workspaceRoot, IReadOnlyList<string> extensions)
     {
         var normalized = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
@@ -62,7 +58,10 @@ internal static class WorkspaceScanner
         return Path.GetRelativePath(workspaceRoot, filePath);
     }
 
-    internal static IEnumerable<(int lineStart, int lineEnd, string body)> ChunkByLines(string text)
+    internal static IEnumerable<(int lineStart, int lineEnd, string body)> ChunkByLines(
+        string text,
+        int chunkLines,
+        int overlapLines)
     {
         if (string.IsNullOrEmpty(text))
             yield break;
@@ -73,8 +72,8 @@ internal static class WorkspaceScanner
         if (lines.Length == 0)
             yield break;
 
-        var chunk = Math.Max(20, ChunkLines);
-        var overlap = Math.Clamp(ChunkOverlapLines, 0, chunk - 1);
+        var chunk = Math.Max(20, chunkLines);
+        var overlap = Math.Clamp(overlapLines, 0, chunk - 1);
         var step = Math.Max(1, chunk - overlap);
 
         for (var i = 0; i < lines.Length; i += step)

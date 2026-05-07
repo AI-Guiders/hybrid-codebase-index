@@ -27,3 +27,13 @@ exclude_path_segments = ["bin", "obj", ".git", "node_modules", ".vs", ".idea", "
 # Use workspace override settings.toml to add env-specific ignores (e.g. ".cursorignore").
 ignore_files = [".gitignore", ".git/info/exclude", ".cascadeideignore"]
 
+# Max file size indexed as a single document (bytes). Larger files are skipped as too_large.
+max_indexed_file_bytes = 524288
+
+# Chunking (line windows) for FTS documents.
+chunk_lines = 110
+chunk_overlap_lines = 15
+
+# Binary detection probe size (bytes); if the probe contains NUL, file is treated as binary.
+binary_probe_bytes = 8192
+

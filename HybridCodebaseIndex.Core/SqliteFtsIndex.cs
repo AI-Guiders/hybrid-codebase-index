@@ -77,6 +77,12 @@ internal static class SqliteFtsIndex
         CancellationToken cancellationToken)
         => Task.Run(() => FullRebuild(workspaceRoot, dbPath, cancellationToken), cancellationToken);
 
+    internal static Task<ReindexSummary> ReindexIncrementalAsync(
+        string workspaceRoot,
+        string dbPath,
+        CancellationToken cancellationToken)
+        => Task.Run(() => ReindexIncremental(workspaceRoot, dbPath, cancellationToken), cancellationToken);
+
     private static ReindexSummary FullRebuild(string workspaceRoot, string dbPath, CancellationToken cancellationToken)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -102,6 +108,10 @@ internal static class SqliteFtsIndex
 
             var settings = IndexSettings.TryLoadFromIndexDirectory(Path.GetDirectoryName(dbPath)!);
             var extensions = settings.GetEffectiveExtensions();
+            var maxBytes = settings.GetEffectiveMaxIndexedFileBytes();
+            var chunkLines = settings.GetEffectiveChunkLines();
+            var overlapLines = settings.GetEffectiveChunkOverlapLines();
+            var probeBytes = settings.GetEffectiveBinaryProbeBytes();
 
             // Prepare a fresh FTS table for the new build.
             Exec(conn, "DROP TABLE IF EXISTS chunks_new;");
@@ -169,7 +179,7 @@ internal static class SqliteFtsIndex
                 try
                 {
                     info = new FileInfo(absolute);
-                    if (info.Length > WorkspaceScanner.MaxIndexedFileBytes)
+                    if (info.Length > maxBytes)
                     {
                         skippedLarge++;
                         AddSample(skippedSample, rel, "too_large");
@@ -184,7 +194,7 @@ internal static class SqliteFtsIndex
                 }
 
                 using var fs = info.OpenRead();
-                var probeSize = (int)Math.Min(8192, info.Length);
+                var probeSize = (int)Math.Min(probeBytes, info.Length);
                 var probe = new byte[probeSize];
                 var read = fs.ReadAtLeast(probe.AsSpan(0, probeSize), probeSize, throwOnEndOfStream: false);
                 if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
@@ -200,7 +210,7 @@ internal static class SqliteFtsIndex
 
                 var ext = Path.GetExtension(absolute);
 
-                var chunks = WorkspaceScanner.ChunkByLines(text);
+                var chunks = WorkspaceScanner.ChunkByLines(text, chunkLines, overlapLines);
                 var anyChunk = false;
                 foreach (var (lineStart, lineEnd, body) in chunks)
                 {
@@ -279,6 +289,291 @@ internal static class SqliteFtsIndex
             skippedExcluded,
             skippedSample,
             sw.Elapsed);
+    }
+
+    private static ReindexSummary ReindexIncremental(string workspaceRoot, string dbPath, CancellationToken cancellationToken)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+
+        var filesIndexed = 0;
+        var skippedLarge = 0;
+        var skippedBinary = 0;
+        var skippedExcluded = 0;
+        var skippedSample = new List<SkippedPath>(capacity: 64);
+
+        using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadWriteCreate");
+        conn.Open();
+
+        EnsureMetaTable(conn);
+        EnsureChunksTable(conn);
+        EnsureFileStateTable(conn);
+
+        try
+        {
+            UpsertMeta(conn, "reindex_state", "running");
+            UpsertMeta(conn, "reindex_started_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+
+            var settings = IndexSettings.TryLoadFromIndexDirectory(Path.GetDirectoryName(dbPath)!);
+            var extensions = settings.GetEffectiveExtensions();
+            var maxBytes = settings.GetEffectiveMaxIndexedFileBytes();
+            var chunkLines = settings.GetEffectiveChunkLines();
+            var overlapLines = settings.GetEffectiveChunkOverlapLines();
+            var probeBytes = settings.GetEffectiveBinaryProbeBytes();
+
+            var roots = new List<string>(capacity: 1 + settings.ExtraIncludeRoots.Count) { workspaceRoot };
+            foreach (var extra in settings.ExtraIncludeRoots)
+            {
+                var p = Path.GetFullPath(Path.Combine(workspaceRoot, extra));
+                if (Directory.Exists(p))
+                    roots.Add(p);
+            }
+
+            var candidates = new List<string>(capacity: 8192);
+            foreach (var root in roots)
+                candidates.AddRange(WorkspaceScanner.EnumerateIndexableFiles(root, extensions));
+
+            var gitIgnore = GitIgnoreRules.TryLoad(workspaceRoot, settings.IgnoreFiles);
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            using var tx = conn.BeginTransaction();
+
+            foreach (var absolute in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (WorkspaceScanner.ShouldExcludePath(absolute, settings.ExcludePathSegments))
+                {
+                    skippedExcluded++;
+                    AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
+                    continue;
+                }
+
+                var rel = WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal);
+                seen.Add(rel);
+
+                if (GitIgnoreRules.IsIgnored(gitIgnore, rel))
+                {
+                    skippedExcluded++;
+                    AddSample(skippedSample, rel, "gitignore");
+                    continue;
+                }
+
+                FileInfo info;
+                try
+                {
+                    info = new FileInfo(absolute);
+                    if (info.Length > maxBytes)
+                    {
+                        skippedLarge++;
+                        AddSample(skippedSample, rel, "too_large");
+                        continue;
+                    }
+                }
+                catch
+                {
+                    skippedExcluded++;
+                    AddSample(skippedSample, rel, "io_error");
+                    continue;
+                }
+
+                var lastWriteUtcTicks = info.LastWriteTimeUtc.Ticks;
+                if (!IsFileChanged(conn, tx, rel, info.Length, lastWriteUtcTicks))
+                    continue;
+
+                using var fs = info.OpenRead();
+                var probeSize = (int)Math.Min(probeBytes, info.Length);
+                var probe = new byte[probeSize];
+                var read = fs.ReadAtLeast(probe.AsSpan(0, probeSize), probeSize, throwOnEndOfStream: false);
+                if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
+                {
+                    skippedBinary++;
+                    AddSample(skippedSample, rel, "binary");
+                    continue;
+                }
+
+                fs.Position = 0;
+                using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                var text = reader.ReadToEnd();
+
+                // Replace chunks for this path.
+                DeleteChunksForPath(conn, tx, rel);
+
+                var ext = Path.GetExtension(absolute);
+                var chunks = WorkspaceScanner.ChunkByLines(text, chunkLines, overlapLines);
+                var anyChunk = false;
+                foreach (var (lineStart, lineEnd, body) in chunks)
+                {
+                    InsertChunk(conn, tx, rel, ext, lineStart, lineEnd, body);
+                    anyChunk = true;
+                }
+
+                if (anyChunk)
+                    filesIndexed++;
+
+                UpsertFileState(conn, tx, rel, info.Length, lastWriteUtcTicks);
+            }
+
+            // Remove deleted files.
+            foreach (var stale in EnumerateStalePaths(conn, tx, seen))
+            {
+                DeleteChunksForPath(conn, tx, stale);
+                DeleteFileState(conn, tx, stale);
+            }
+
+            tx.Commit();
+
+            UpsertMeta(conn, "format_version", FormatVersion.ToString(CultureInfo.InvariantCulture));
+            UpsertMeta(conn, "indexed_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            UpsertMeta(conn, "workspace_root", workspaceRoot);
+            UpsertMeta(conn, "reindex_error", "");
+            UpsertMeta(conn, "reindex_error_at", "");
+            UpsertMeta(conn, "reindex_state", "idle");
+            UpsertMeta(conn, "reindex_started_at", "");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                UpsertMeta(conn, "reindex_state", "error");
+                UpsertMeta(conn, "reindex_error", ex.GetType().Name + ": " + ex.Message);
+                UpsertMeta(conn, "reindex_error_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            }
+            catch
+            {
+                // ignore
+            }
+
+            throw;
+        }
+
+        sw.Stop();
+        return new ReindexSummary(
+            FormatVersion,
+            dbPath,
+            filesIndexed,
+            skippedLarge,
+            skippedBinary,
+            skippedExcluded,
+            skippedSample,
+            sw.Elapsed);
+    }
+
+    private static void EnsureChunksTable(SqliteConnection conn)
+    {
+        try
+        {
+            Exec(conn, "SELECT 1 FROM chunks LIMIT 1;");
+        }
+        catch (SqliteException)
+        {
+            Exec(conn, """
+                CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
+                  path,
+                  extension UNINDEXED,
+                  line_start UNINDEXED,
+                  line_end UNINDEXED,
+                  body,
+                  tokenize='unicode61 remove_diacritics 1'
+                );
+                """);
+        }
+    }
+
+    private static void EnsureFileStateTable(SqliteConnection conn)
+    {
+        Exec(conn, """
+            CREATE TABLE IF NOT EXISTS file_state(
+              path TEXT PRIMARY KEY,
+              size_bytes INTEGER NOT NULL,
+              last_write_utc_ticks INTEGER NOT NULL
+            );
+            """);
+    }
+
+    private static bool IsFileChanged(SqliteConnection conn, SqliteTransaction tx, string path, long sizeBytes, long lastWriteUtcTicks)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT size_bytes, last_write_utc_ticks FROM file_state WHERE path=$p LIMIT 1;";
+        cmd.Parameters.AddWithValue("$p", path);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read())
+            return true;
+        var prevSize = r.GetInt64(0);
+        var prevTicks = r.GetInt64(1);
+        return prevSize != sizeBytes || prevTicks != lastWriteUtcTicks;
+    }
+
+    private static void UpsertFileState(SqliteConnection conn, SqliteTransaction tx, string path, long sizeBytes, long lastWriteUtcTicks)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO file_state(path, size_bytes, last_write_utc_ticks)
+            VALUES($p, $s, $t)
+            ON CONFLICT(path) DO UPDATE SET size_bytes=excluded.size_bytes, last_write_utc_ticks=excluded.last_write_utc_ticks;
+            """;
+        cmd.Parameters.AddWithValue("$p", path);
+        cmd.Parameters.AddWithValue("$s", sizeBytes);
+        cmd.Parameters.AddWithValue("$t", lastWriteUtcTicks);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void DeleteFileState(SqliteConnection conn, SqliteTransaction tx, string path)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "DELETE FROM file_state WHERE path=$p;";
+        cmd.Parameters.AddWithValue("$p", path);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static IEnumerable<string> EnumerateStalePaths(SqliteConnection conn, SqliteTransaction tx, HashSet<string> seen)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT path FROM file_state;";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var p = r.GetString(0);
+            if (!seen.Contains(p))
+                yield return p;
+        }
+    }
+
+    private static void DeleteChunksForPath(SqliteConnection conn, SqliteTransaction tx, string path)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "DELETE FROM chunks WHERE path=$p;";
+        cmd.Parameters.AddWithValue("$p", path);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void InsertChunk(
+        SqliteConnection conn,
+        SqliteTransaction tx,
+        string path,
+        string ext,
+        int lineStart,
+        int lineEnd,
+        string body)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO chunks(path, extension, line_start, line_end, body)
+            VALUES ($path, $ext, $ls, $le, $body);
+            """;
+        cmd.Parameters.AddWithValue("$path", path);
+        cmd.Parameters.AddWithValue("$ext", ext);
+        cmd.Parameters.AddWithValue("$ls", lineStart);
+        cmd.Parameters.AddWithValue("$le", lineEnd);
+        cmd.Parameters.AddWithValue("$body", body);
+        cmd.ExecuteNonQuery();
     }
 
     private static void AddSample(List<SkippedPath> sample, string relPath, string reason)

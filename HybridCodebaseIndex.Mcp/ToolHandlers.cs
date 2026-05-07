@@ -120,7 +120,10 @@ internal static class ToolHandlers
     private static string HandleReindex(IReadOnlyDictionary<string, JsonElement> args)
     {
         var ws = RequireString(args, "workspace_path");
-        var summary = Service.FullReindexAsync(ws).GetAwaiter().GetResult();
+        var full = OptionalBool(args, "full_rebuild") ?? false;
+        var summary = full
+            ? Service.FullRebuildAsync(ws).GetAwaiter().GetResult()
+            : Service.FullReindexAsync(ws).GetAwaiter().GetResult();
         var dto = new ReindexResultDto(
             IndexFormatVersion: summary.IndexFormatVersion,
             DatabasePath: summary.DatabasePath,
@@ -151,6 +154,15 @@ internal static class ToolHandlers
         if (!args.TryGetValue(key, out var el))
             return null;
         return el.TryGetInt32(out var i) ? i : null;
+    }
+
+    private static bool? OptionalBool(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el))
+            return null;
+        return el.ValueKind == JsonValueKind.True ? true
+            : el.ValueKind == JsonValueKind.False ? false
+            : null;
     }
 
     private static long RequireLong(IReadOnlyDictionary<string, JsonElement> args, string key)

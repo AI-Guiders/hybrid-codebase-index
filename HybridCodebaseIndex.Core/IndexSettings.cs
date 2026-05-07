@@ -9,7 +9,11 @@ public sealed record IndexSettings(
     IReadOnlyList<string>? IncludeExtensions,
     IReadOnlyList<string>? ExcludeExtensions,
     IReadOnlyList<string> ExcludePathSegments,
-    IReadOnlyList<string> IgnoreFiles)
+    IReadOnlyList<string> IgnoreFiles,
+    long MaxIndexedFileBytes,
+    int ChunkLines,
+    int ChunkOverlapLines,
+    int BinaryProbeBytes)
 {
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
@@ -17,7 +21,11 @@ public sealed record IndexSettings(
         IncludeExtensions: null,
         ExcludeExtensions: null,
         ExcludePathSegments: [],
-        IgnoreFiles: []);
+        IgnoreFiles: [],
+        MaxIndexedFileBytes: 0,
+        ChunkLines: 0,
+        ChunkOverlapLines: 0,
+        BinaryProbeBytes: 0);
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
@@ -62,9 +70,26 @@ public sealed record IndexSettings(
         var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
         var ignoreFiles = ReadStringArray(diskModel, embeddedModel, "ignore_files") ?? [];
 
-        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments, ignoreFiles);
+        var maxBytes = ReadLong(diskModel, embeddedModel, "max_indexed_file_bytes") ?? 0;
+        var chunkLines = ReadInt(diskModel, embeddedModel, "chunk_lines") ?? 0;
+        var overlapLines = ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
+        var probeBytes = ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
+
+        settings = new IndexSettings(includeCs, extraRoots, includeExt, excludeExt, excludeSegments, ignoreFiles, maxBytes, chunkLines, overlapLines, probeBytes);
         return true;
     }
+
+    public long GetEffectiveMaxIndexedFileBytes()
+        => MaxIndexedFileBytes > 0 ? MaxIndexedFileBytes : 512 * 1024;
+
+    public int GetEffectiveChunkLines()
+        => ChunkLines > 0 ? ChunkLines : 110;
+
+    public int GetEffectiveChunkOverlapLines()
+        => ChunkOverlapLines > 0 ? ChunkOverlapLines : 15;
+
+    public int GetEffectiveBinaryProbeBytes()
+        => BinaryProbeBytes > 0 ? BinaryProbeBytes : 8192;
 
     public IReadOnlyList<string> GetEffectiveExtensions()
     {
@@ -124,6 +149,24 @@ public sealed record IndexSettings(
             return b;
         if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is bool bb)
             return bb;
+        return null;
+    }
+
+    private static int? ReadInt(TomlTable? overlay, TomlTable? baseModel, string key)
+    {
+        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
+            return l is >= int.MinValue and <= int.MaxValue ? (int)l : null;
+        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is long ll)
+            return ll is >= int.MinValue and <= int.MaxValue ? (int)ll : null;
+        return null;
+    }
+
+    private static long? ReadLong(TomlTable? overlay, TomlTable? baseModel, string key)
+    {
+        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
+            return l;
+        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is long ll)
+            return ll;
         return null;
     }
 

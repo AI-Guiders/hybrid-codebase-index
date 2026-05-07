@@ -73,13 +73,14 @@ internal static class ToolCatalog
             new Tool
             {
                 Name = "codebase_index_reindex",
-                Description = "Полная перестройка индекса (v0): обход расширений, FTS5, без инкрементального watcher.",
+                Description = "Перестройка индекса (FTS5). По умолчанию инкрементальная по файлам; full_rebuild=true — полная.",
                 InputSchema = Schema(new
                 {
                     type = "object",
                     properties = new
                     {
                         workspace_path = new { type = "string", description = "Корень workspace." },
+                        full_rebuild = new { type = "boolean", description = "Если true — полный rebuild вместо инкремента." },
                     },
                     required = RequiredWorkspace,
                 }),

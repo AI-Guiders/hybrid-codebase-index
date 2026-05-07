@@ -19,6 +19,13 @@ public sealed class CodebaseIndexService
     {
         var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         var db = SqliteFtsIndex.ResolveDatabasePathForWrite(root, _indexDirectoryRelative);
+        return SqliteFtsIndex.ReindexIncrementalAsync(root, db, cancellationToken);
+    }
+
+    public Task<ReindexSummary> FullRebuildAsync(string workspaceRoot, CancellationToken cancellationToken = default)
+    {
+        var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        var db = SqliteFtsIndex.ResolveDatabasePathForWrite(root, _indexDirectoryRelative);
         return SqliteFtsIndex.FullRebuildAsync(root, db, cancellationToken);
     }
 
