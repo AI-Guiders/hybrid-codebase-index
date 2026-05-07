@@ -930,7 +930,7 @@ internal static class SqliteFtsIndex
                 out _,
                 out var src,
                 out var err);
-            return new IndexStatus(FormatVersion, dbPath, false, 0, false, null, workspaceRoot, null, null, src, err, null, null);
+            return new IndexStatus(FormatVersion, dbPath, false, 0, false, null, workspaceRoot, null, null, src, err, null, null, null);
         }
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
@@ -952,13 +952,25 @@ internal static class SqliteFtsIndex
 
         IndexSettings.TryLoadFromIndexDirectoryWithDiagnostics(
             Path.GetDirectoryName(dbPath),
-            out _,
+            out var settings,
             out var settingsSource,
             out var settingsParseError);
         using var countCmd = conn.CreateCommand();
         countCmd.CommandText = "SELECT count(*) FROM chunks;";
         var docCount = Convert.ToInt32(countCmd.ExecuteScalar() ?? 0);
         var mayBeStale = string.Equals(reindexState, "running", StringComparison.OrdinalIgnoreCase);
+
+        var eff = new EffectiveSettings(
+            settings.IncludeCsInFts,
+            settings.ExtraIncludeRoots,
+            settings.ExcludeRoots,
+            settings.GetEffectiveExtensions(),
+            settings.ExcludePathSegments,
+            settings.IgnoreFiles,
+            settings.GetEffectiveMaxIndexedFileBytes(),
+            settings.GetEffectiveChunkLines(),
+            settings.GetEffectiveChunkOverlapLines(),
+            settings.GetEffectiveBinaryProbeBytes());
         return new IndexStatus(
             FormatVersion,
             dbPath,
@@ -971,6 +983,7 @@ internal static class SqliteFtsIndex
             lastErrAt,
             settingsSource,
             settingsParseError,
+            eff,
             reindexState,
             reindexStartedAt);
     }

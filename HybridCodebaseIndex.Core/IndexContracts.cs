@@ -42,8 +42,21 @@ public sealed record IndexStatus(
     string? LastReindexErrorAtIso,
     string SettingsSource,
     string? SettingsParseError,
+    EffectiveSettings? EffectiveSettings,
     string? ReindexState,
     string? ReindexStartedAtIso);
+
+public sealed record EffectiveSettings(
+    bool IncludeCsInFts,
+    IReadOnlyList<string> ExtraIncludeRoots,
+    IReadOnlyList<string> ExcludeRoots,
+    IReadOnlyList<string> EffectiveExtensions,
+    IReadOnlyList<string> ExcludePathSegments,
+    IReadOnlyList<string> IgnoreFiles,
+    long MaxIndexedFileBytes,
+    int ChunkLines,
+    int ChunkOverlapLines,
+    int BinaryProbeBytes);
 
 public sealed record ReindexSummary(
     int IndexFormatVersion,

@@ -114,6 +114,19 @@ internal static class ToolHandlers
             LastReindexErrorAtIso: st.LastReindexErrorAtIso,
             SettingsSource: st.SettingsSource,
             SettingsParseError: st.SettingsParseError,
+            EffectiveSettings: st.EffectiveSettings is null
+                ? null
+                : new EffectiveSettingsDto(
+                    st.EffectiveSettings.IncludeCsInFts,
+                    st.EffectiveSettings.ExtraIncludeRoots.ToList(),
+                    st.EffectiveSettings.ExcludeRoots.ToList(),
+                    st.EffectiveSettings.EffectiveExtensions.ToList(),
+                    st.EffectiveSettings.ExcludePathSegments.ToList(),
+                    st.EffectiveSettings.IgnoreFiles.ToList(),
+                    st.EffectiveSettings.MaxIndexedFileBytes,
+                    st.EffectiveSettings.ChunkLines,
+                    st.EffectiveSettings.ChunkOverlapLines,
+                    st.EffectiveSettings.BinaryProbeBytes),
             ReindexState: st.ReindexState,
             ReindexStartedAtIso: st.ReindexStartedAtIso);
 
@@ -243,8 +256,21 @@ internal static class ToolHandlers
         string? LastReindexErrorAtIso,
         string SettingsSource,
         string? SettingsParseError,
+        EffectiveSettingsDto? EffectiveSettings,
         string? ReindexState,
         string? ReindexStartedAtIso);
+
+    private sealed record EffectiveSettingsDto(
+        bool IncludeCsInFts,
+        List<string> ExtraIncludeRoots,
+        List<string> ExcludeRoots,
+        List<string> EffectiveExtensions,
+        List<string> ExcludePathSegments,
+        List<string> IgnoreFiles,
+        long MaxIndexedFileBytes,
+        int ChunkLines,
+        int ChunkOverlapLines,
+        int BinaryProbeBytes);
 
     private sealed record ReindexResultDto(
         int IndexFormatVersion,
