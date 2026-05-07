@@ -65,6 +65,9 @@ internal static partial class SqliteFtsIndex
             {
                 sb.AppendLine("__hci_kind:razor");
 
+                if (Regex.IsMatch(text, @"(?m)^\s*@code\b"))
+                    sb.AppendLine("__hci_razor:has_code_block");
+
                 foreach (Match m in Regex.Matches(text, @"(?m)^\s*@page\s+(?<route>.+?)\s*$"))
                 {
                     var route = m.Groups["route"].Value.Trim().Trim('"', '\'');
@@ -76,6 +79,110 @@ internal static partial class SqliteFtsIndex
                     }
                 }
 
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@layout\s+(?<layout>\S+)\s*$"))
+                {
+                    var layout = m.Groups["layout"].Value.Trim().Trim('"', '\'');
+                    if (layout.Length > 0)
+                    {
+                        sb.Append("__hci_layout:");
+                        sb.Append(layout);
+                        sb.AppendLine();
+                    }
+                }
+
+                var nsCount = 0;
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@namespace\s+(?<ns>\S+)\s*$"))
+                {
+                    var ns = m.Groups["ns"].Value.Trim();
+                    if (ns.Length > 0)
+                    {
+                        sb.Append("__hci_namespace:");
+                        sb.Append(ns);
+                        sb.AppendLine();
+                    }
+
+                    if (++nsCount >= 4)
+                        break;
+                }
+
+                var usingCount = 0;
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@using\s+(?<u>[^\r\n]+?)\s*$"))
+                {
+                    var u = m.Groups["u"].Value.Trim().Trim('"', '\'');
+                    if (u.Length > 0)
+                    {
+                        sb.Append("__hci_using:");
+                        sb.Append(u);
+                        sb.AppendLine();
+                    }
+
+                    if (++usingCount >= 40)
+                        break;
+                }
+
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@implements\s+(?<t>.+?)\s*$"))
+                {
+                    var t = m.Groups["t"].Value.Trim().Trim('"', '\'');
+                    if (t.Length > 0)
+                    {
+                        sb.Append("__hci_implements:");
+                        sb.Append(t);
+                        sb.AppendLine();
+                    }
+                }
+
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@inherits\s+(?<b>\S+)\s*$"))
+                {
+                    var b = m.Groups["b"].Value.Trim().Trim('"', '\'');
+                    if (b.Length > 0)
+                    {
+                        sb.Append("__hci_inherits:");
+                        sb.Append(b);
+                        sb.AppendLine();
+                    }
+                }
+
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@typeparam\s+(?<p>\w+)\s*$"))
+                {
+                    var p = m.Groups["p"].Value.Trim();
+                    if (p.Length > 0)
+                    {
+                        sb.Append("__hci_typeparam:");
+                        sb.Append(p);
+                        sb.AppendLine();
+                    }
+                }
+
+                var handlers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Match m in Regex.Matches(text, @"\b@(on[a-z]+)\b"))
+                {
+                    var ev = m.Groups[1].Value;
+                    if (ev.Length <= 2)
+                        continue;
+                    var token = "@" + ev;
+                    if (!handlers.Add(token))
+                        continue;
+                    sb.Append("__hci_handler:");
+                    sb.Append(token);
+                    sb.AppendLine();
+                }
+
+                var attrCount = 0;
+                foreach (Match m in Regex.Matches(text, @"(?m)^\s*@attribute\s+\[(?<inner>[^\]]+)\]"))
+                {
+                    var inner = m.Groups["inner"].Value.Trim();
+                    if (inner.Length > 0)
+                    {
+                        sb.Append("__hci_attribute:");
+                        sb.Append(inner);
+                        sb.AppendLine();
+                    }
+
+                    if (++attrCount >= 24)
+                        break;
+                }
+
+                var injectCount = 0;
                 foreach (Match m in Regex.Matches(text, @"(?m)^\s*@inject\s+(?<type>\S+)\s+(?<name>\S+)\s*$"))
                 {
                     var type = m.Groups["type"].Value.Trim();
@@ -88,6 +195,25 @@ internal static partial class SqliteFtsIndex
                         sb.Append(name);
                         sb.AppendLine();
                     }
+
+                    if (++injectCount >= 32)
+                        break;
+                }
+
+                // [Parameter] public Type Name { — best-effort for .razor @code sections
+                var paramCount = 0;
+                foreach (Match m in Regex.Matches(text, @"\[\s*Parameter(?:\([^\]]*\))?\s*\]\s*(?:public\s+)?[\w<>,\[\]\s\.]+\s+(?<id>\w+)\s*\{", RegexOptions.Singleline))
+                {
+                    var id = m.Groups["id"].Value.Trim();
+                    if (id.Length > 0 && char.IsUpper(id[0]))
+                    {
+                        sb.Append("__hci_parameter:");
+                        sb.Append(id);
+                        sb.AppendLine();
+                    }
+
+                    if (++paramCount >= 48)
+                        break;
                 }
 
                 var comps = new HashSet<string>(StringComparer.Ordinal);
@@ -111,6 +237,80 @@ internal static partial class SqliteFtsIndex
             if (ext == ".axaml")
             {
                 sb.AppendLine("__hci_kind:axaml");
+
+                foreach (Match m in Regex.Matches(text, @"\bx:Class\s*=\s*""(?<c>[^""]+)"""))
+                {
+                    var c = m.Groups["c"].Value.Trim();
+                    if (c.Length > 0)
+                    {
+                        sb.Append("__hci_xclass:");
+                        sb.Append(c);
+                        sb.AppendLine();
+                    }
+                }
+
+                var xmlnsCount = 0;
+                foreach (Match m in Regex.Matches(text, @"xmlns\s*:\s*(?<p>\w+)\s*=\s*""(?<u>[^""]+)"""))
+                {
+                    var p = m.Groups["p"].Value.Trim();
+                    var u = m.Groups["u"].Value.Trim();
+                    if (p.Length > 0 && u.Length > 0)
+                    {
+                        sb.Append("__hci_xmlns:");
+                        sb.Append(p);
+                        sb.Append('=');
+                        sb.Append(u);
+                        sb.AppendLine();
+                    }
+
+                    if (++xmlnsCount >= 28)
+                        break;
+                }
+
+                var resCount = 0;
+                foreach (Match m in Regex.Matches(text, @"\{StaticResource\s+(?<r>[^}]+)\}"))
+                {
+                    var r = m.Groups["r"].Value.Trim();
+                    if (r.Length > 0)
+                    {
+                        sb.Append("__hci_staticresource:");
+                        sb.Append(r);
+                        sb.AppendLine();
+                    }
+
+                    if (++resCount >= 48)
+                        break;
+                }
+
+                var dynResCount = 0;
+                foreach (Match m in Regex.Matches(text, @"\{DynamicResource\s+(?<r>[^}]+)\}"))
+                {
+                    var r = m.Groups["r"].Value.Trim();
+                    if (r.Length > 0)
+                    {
+                        sb.Append("__hci_dynamicresource:");
+                        sb.Append(r);
+                        sb.AppendLine();
+                    }
+
+                    if (++dynResCount >= 48)
+                        break;
+                }
+
+                var keyCount = 0;
+                foreach (Match m in Regex.Matches(text, @"\bx:Key\s*=\s*""(?<k>[^""]+)"""))
+                {
+                    var k = m.Groups["k"].Value.Trim();
+                    if (k.Length > 0)
+                    {
+                        sb.Append("__hci_key:");
+                        sb.Append(k);
+                        sb.AppendLine();
+                    }
+
+                    if (++keyCount >= 64)
+                        break;
+                }
 
                 var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (Match m in Regex.Matches(text, @"\bx:Name\s*=\s*""(?<n>[^""]+)"""))
