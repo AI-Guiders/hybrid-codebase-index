@@ -30,6 +30,10 @@
     {
       "name": "codebase_index_verify",
       "description": "Анти-галлюцинации: проверить список идентификаторов через индекс (FTS) и вернуть exists/missing + подсказки похожих (prefix search)."
+    },
+    {
+      "name": "codebase_index_draft_doc",
+      "description": "Синтез документации (черновик): собрать markdown-скелет с выдержками из изменённых файлов (по индексу)."
     }
   ]
 }

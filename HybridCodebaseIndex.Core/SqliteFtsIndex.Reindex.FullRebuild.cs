@@ -25,6 +25,7 @@ internal static partial class SqliteFtsIndex
         // Root cause fix for Windows file-locking: do NOT replace/rename the DB file.
         // Rebuild in-place by swapping tables inside the same SQLite file (WAL allows concurrent readers).
         EnsureMetaTable(conn);
+        EnsureFileStateTable(conn);
 
         try
         {
@@ -52,6 +53,9 @@ internal static partial class SqliteFtsIndex
                 """);
 
             using var tx = conn.BeginTransaction();
+
+            // Rebuild file_state from scratch for freshness metadata.
+            Exec(conn, "DELETE FROM file_state;", tx);
             using var insert = conn.CreateCommand();
             insert.Transaction = tx;
             insert.CommandText = """
@@ -150,6 +154,7 @@ internal static partial class SqliteFtsIndex
 
                 var ext = Path.GetExtension(absolute);
                 var header = BuildArtifactAugmentationHeader(workspaceRoot, absolute, rel, ext, text);
+                var lastWriteUtcTicks = info.LastWriteTimeUtc.Ticks;
 
                 var chunks = WorkspaceScanner.ChunkByLines(text, chunkLines, overlapLines);
                 var anyChunk = false;
@@ -167,7 +172,10 @@ internal static partial class SqliteFtsIndex
                 }
 
                 if (anyChunk)
+                {
                     filesIndexed++;
+                    UpsertFileState(conn, tx, rel, info.Length, lastWriteUtcTicks);
+                }
             }
 
             tx.Commit();

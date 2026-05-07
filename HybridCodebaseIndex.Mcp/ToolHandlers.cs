@@ -37,6 +37,7 @@ internal static class ToolHandlers
             "codebase_index_reindex" => HandleReindex(args),
             "codebase_index_watch" => HandleWatch(args),
             "codebase_index_verify" => HandleVerify(args),
+            "codebase_index_draft_doc" => HandleDraftDoc(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
     }
@@ -80,7 +81,7 @@ internal static class ToolHandlers
             IndexFormatVersion: response.IndexFormatVersion,
             Query: response.Query,
             DatabasePath: response.DatabasePath,
-            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount)).ToList());
+            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso)).ToList());
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -98,7 +99,7 @@ internal static class ToolHandlers
             DatabasePath: resp.DatabasePath,
             Hit: resp.Hit is null
                 ? null
-                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.Extension, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd, resp.Hit.ChunkCharCount));
+                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.Extension, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd, resp.Hit.ChunkCharCount, resp.Hit.LastWriteUtcIso));
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -238,7 +239,7 @@ internal static class ToolHandlers
 
             var hits = resp.Hits
                 .Take(topN)
-                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount))
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                 .ToList();
 
             if (hits.Count > 0)
@@ -264,7 +265,7 @@ internal static class ToolHandlers
 
             var sug = sugResp.Hits
                 .Take(suggestions)
-                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount))
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                 .ToList();
 
             results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: sug));
@@ -279,6 +280,22 @@ internal static class ToolHandlers
             TopN: topN,
             Suggestions: suggestions,
             Items: results), JsonOut);
+    }
+
+    private static string HandleDraftDoc(IReadOnlyDictionary<string, JsonElement> args)
+    {
+        var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
+        var title = RequireString(args, "title");
+        var paths = RequireStringArray(args, "changed_paths");
+
+        var resp = Service.DraftDocAsync(ws, sln, title, paths).GetAwaiter().GetResult();
+        return JsonSerializer.Serialize(new DraftDocDto(
+            Err: resp.Err,
+            IndexFormatVersion: resp.IndexFormatVersion,
+            DatabasePath: resp.DatabasePath,
+            Title: resp.Title,
+            Markdown: resp.Markdown), JsonOut);
     }
 
     private static string RequireString(IReadOnlyDictionary<string, JsonElement> args, string key)
@@ -382,7 +399,8 @@ internal static class ToolHandlers
         string? Snippet,
         int LineStart,
         int LineEnd,
-        int ChunkCharCount);
+        int ChunkCharCount,
+        string? LastWriteUtcIso);
 
     private sealed record ExplainResultDto(
         string? Err,
@@ -463,4 +481,11 @@ internal static class ToolHandlers
         string? Err,
         List<HitDto> Hits,
         List<HitDto> Suggestions);
+
+    private sealed record DraftDocDto(
+        string? Err,
+        int IndexFormatVersion,
+        string DatabasePath,
+        string Title,
+        string Markdown);
 }

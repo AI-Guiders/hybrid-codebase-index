@@ -132,6 +132,24 @@ internal static class ToolCatalog
                     required = new[] { "workspace_path", "identifiers" },
                 }),
             },
+            new Tool
+            {
+                Name = "codebase_index_draft_doc",
+                Description =
+                    "Синтез документации (черновик): собрать markdown-скелет с выдержками из изменённых файлов (по индексу).",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Scope: одна БД на (workspace_root, solution_path)." },
+                        title = new { type = "string", description = "Заголовок документа (например 'ADR: ...' или 'Design notes: ...')." },
+                        changed_paths = new { type = "array", items = new { type = "string" }, description = "Список путей (relative to workspace) для включения в черновик." },
+                    },
+                    required = new[] { "workspace_path", "title", "changed_paths" },
+                }),
+            },
         ];
     }
 }

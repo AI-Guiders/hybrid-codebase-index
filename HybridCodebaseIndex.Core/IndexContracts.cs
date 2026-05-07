@@ -16,7 +16,8 @@ public sealed record IndexHit(
     string? Snippet,
     int LineStart,
     int LineEnd,
-    int ChunkCharCount);
+    int ChunkCharCount,
+    string? LastWriteUtcIso);
 
 public sealed record SearchResponse(
     int IndexFormatVersion,

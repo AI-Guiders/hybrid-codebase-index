@@ -99,6 +99,19 @@ public sealed class CodebaseIndexService
         return SqliteFtsIndex.GetStatusAsync(root, db, cancellationToken);
     }
 
+    public Task<DocDraftResponse> DraftDocAsync(
+        string workspaceRoot,
+        string? solutionPath,
+        string title,
+        IReadOnlyList<string> changedPaths,
+        CancellationToken cancellationToken = default)
+    {
+        var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        var indexDir = ResolveIndexDirectoryRelative(root, solutionPath);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, indexDir);
+        return SqliteFtsIndex.DraftDocAsync(root, db, title, changedPaths, cancellationToken);
+    }
+
     private string ResolveIndexDirectoryRelative(string workspaceRootNormalized, string? solutionPath)
     {
         if (string.IsNullOrWhiteSpace(solutionPath))

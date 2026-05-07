@@ -36,72 +36,92 @@ internal static partial class SqliteFtsIndex
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
 
-        using var cmd = conn.CreateCommand();
-        var sql = new StringBuilder();
-        sql.AppendLine("SELECT rowid, path, extension, line_start, line_end, length(body), bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)");
-        sql.AppendLine("FROM chunks");
-        sql.AppendLine("WHERE chunks MATCH $q");
-
-        if (!string.IsNullOrWhiteSpace(pathPrefix))
+        static (SearchResponse response, string? error) RunQuery(SqliteConnection conn, string userQuery, string dbPath, string fts, int topN, string? pathPrefix, IReadOnlyList<string>? excludePathPrefixes, IReadOnlyList<string>? extensions, bool includeFileState)
         {
-            var pfx = NormalizePathPrefix(pathPrefix);
-            sql.AppendLine("  AND path LIKE $pfx ESCAPE '\\'");
-            cmd.Parameters.AddWithValue("$pfx", EscapeLike(pfx) + "%");
-        }
+            using var cmd = conn.CreateCommand();
+            var sql = new StringBuilder();
+            sql.AppendLine(includeFileState
+                ? "SELECT chunks.rowid, chunks.path, chunks.extension, chunks.line_start, chunks.line_end, length(chunks.body), bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24), fs.last_write_utc_ticks"
+                : "SELECT chunks.rowid, chunks.path, chunks.extension, chunks.line_start, chunks.line_end, length(chunks.body), bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24), NULL");
+            sql.AppendLine("FROM chunks");
+            if (includeFileState)
+                sql.AppendLine("LEFT JOIN file_state fs ON fs.path = chunks.path");
+            sql.AppendLine("WHERE chunks MATCH $q");
 
-        if (excludePathPrefixes is { Count: > 0 })
-        {
-            var i = 0;
-            foreach (var raw in excludePathPrefixes)
+            if (!string.IsNullOrWhiteSpace(pathPrefix))
             {
-                var p = NormalizePathPrefix(raw);
-                if (p.Length == 0)
-                    continue;
-                var key = "$xp" + i++;
-                sql.AppendLine($"  AND path NOT LIKE {key} ESCAPE '\\'");
-                cmd.Parameters.AddWithValue(key, EscapeLike(p) + "%");
+                var pfx = NormalizePathPrefix(pathPrefix);
+                sql.AppendLine("  AND path LIKE $pfx ESCAPE '\\'");
+                cmd.Parameters.AddWithValue("$pfx", EscapeLike(pfx) + "%");
             }
-        }
 
-        if (extensions is { Count: > 0 })
-        {
-            var norm = NormalizeExtensionsForFilter(extensions);
-            if (norm.Count > 0)
+            if (excludePathPrefixes is { Count: > 0 })
             {
-                var keys = new List<string>(norm.Count);
-                for (var i = 0; i < norm.Count; i++)
+                var i = 0;
+                foreach (var raw in excludePathPrefixes)
                 {
-                    var k = "$e" + i;
-                    keys.Add(k);
-                    cmd.Parameters.AddWithValue(k, norm[i]);
+                    var p = NormalizePathPrefix(raw);
+                    if (p.Length == 0)
+                        continue;
+                    var key = "$xp" + i++;
+                    sql.AppendLine($"  AND path NOT LIKE {key} ESCAPE '\\'");
+                    cmd.Parameters.AddWithValue(key, EscapeLike(p) + "%");
                 }
-                sql.AppendLine($"  AND extension IN ({string.Join(", ", keys)})");
             }
+
+            if (extensions is { Count: > 0 })
+            {
+                var norm = NormalizeExtensionsForFilter(extensions);
+                if (norm.Count > 0)
+                {
+                    var keys = new List<string>(norm.Count);
+                    for (var i = 0; i < norm.Count; i++)
+                    {
+                        var k = "$e" + i;
+                        keys.Add(k);
+                        cmd.Parameters.AddWithValue(k, norm[i]);
+                    }
+                    sql.AppendLine($"  AND extension IN ({string.Join(", ", keys)})");
+                }
+            }
+
+            sql.AppendLine("ORDER BY bm25(chunks) DESC");
+            sql.AppendLine("LIMIT $lim;");
+
+            cmd.CommandText = sql.ToString();
+            cmd.Parameters.AddWithValue("$q", fts);
+            cmd.Parameters.AddWithValue("$lim", topN);
+
+            var hits = new List<IndexHit>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var hitId = reader.GetInt64(0);
+                var path = reader.GetString(1);
+                var ext = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                var lineStart = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                var lineEnd = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+                var chunkChars = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+                var bm = reader.GetDouble(6);
+                var snip = reader.IsDBNull(7) ? null : reader.GetString(7);
+                var lastWriteIso = reader.IsDBNull(8)
+                    ? null
+                    : new DateTime(reader.GetInt64(8), DateTimeKind.Utc).ToString("O");
+                hits.Add(new IndexHit(hitId, path, ext, HitKinds.TextFts, bm, snip, lineStart, lineEnd, chunkChars, lastWriteIso));
+            }
+
+            return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
         }
 
-        sql.AppendLine("ORDER BY bm25(chunks) DESC");
-        sql.AppendLine("LIMIT $lim;");
-
-        cmd.CommandText = sql.ToString();
-        cmd.Parameters.AddWithValue("$q", fts);
-        cmd.Parameters.AddWithValue("$lim", topN);
-
-        var hits = new List<IndexHit>();
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
+        try
         {
-            var hitId = reader.GetInt64(0);
-            var path = reader.GetString(1);
-            var ext = reader.IsDBNull(2) ? "" : reader.GetString(2);
-            var lineStart = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
-            var lineEnd = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
-            var chunkChars = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
-            var bm = reader.GetDouble(6);
-            var snip = reader.IsDBNull(7) ? null : reader.GetString(7);
-            hits.Add(new IndexHit(hitId, path, ext, HitKinds.TextFts, bm, snip, lineStart, lineEnd, chunkChars));
+            return RunQuery(conn, userQuery, dbPath, fts, topN, pathPrefix, excludePathPrefixes, extensions, includeFileState: true);
         }
-
-        return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("file_state", StringComparison.OrdinalIgnoreCase))
+        {
+            // Back-compat: older DBs may not have file_state. Fall back without freshness.
+            return RunQuery(conn, userQuery, dbPath, fts, topN, pathPrefix, excludePathPrefixes, extensions, includeFileState: false);
+        }
     }
 
     private static string NormalizePathPrefix(string raw)
@@ -144,9 +164,10 @@ internal static partial class SqliteFtsIndex
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT rowid, path, extension, line_start, line_end, length(body), substr(body, 1, 1200)
-            FROM chunks
-            WHERE rowid = $id
+            SELECT c.rowid, c.path, c.extension, c.line_start, c.line_end, length(c.body), substr(c.body, 1, 1200), fs.last_write_utc_ticks
+            FROM chunks c
+            LEFT JOIN file_state fs ON fs.path = c.path
+            WHERE c.rowid = $id
             LIMIT 1;
             """;
         cmd.Parameters.AddWithValue("$id", hitId);
@@ -162,8 +183,11 @@ internal static partial class SqliteFtsIndex
         var lineEnd = r.IsDBNull(4) ? 0 : r.GetInt32(4);
         var chunkChars = r.IsDBNull(5) ? 0 : r.GetInt32(5);
         var body = r.IsDBNull(6) ? null : r.GetString(6);
+        var lastWriteIso = r.IsDBNull(7)
+            ? null
+            : new DateTime(r.GetInt64(7), DateTimeKind.Utc).ToString("O");
 
-        var hit = new IndexHit(id, path, ext, HitKinds.TextFts, 0, body, lineStart, lineEnd, chunkChars);
+        var hit = new IndexHit(id, path, ext, HitKinds.TextFts, 0, body, lineStart, lineEnd, chunkChars, lastWriteIso);
         return new ExplainHitResponse(FormatVersion, dbPath, hit, null);
     }
 
