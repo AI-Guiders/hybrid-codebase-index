@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HybridCodebaseIndex.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7db189a791add149c177a73c9e301f928744c8ec")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4c5ee0571a6ca7d78e1ffff75b538a61056c5d53")]
 [assembly: System.Reflection.AssemblyProductAttribute("HybridCodebaseIndex.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HybridCodebaseIndex.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -42,8 +42,8 @@ internal static class SqliteFtsIndex
         using var insert = conn.CreateCommand();
         insert.Transaction = tx;
         insert.CommandText = """
-            INSERT INTO chunks(path, extension, body)
-            VALUES ($path, $ext, $body);
+            INSERT INTO chunks(path, extension, line_start, line_end, body)
+            VALUES ($path, $ext, $ls, $le, $body);
             """;
 
         foreach (var absolute in WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot))
@@ -81,13 +81,24 @@ internal static class SqliteFtsIndex
 
             var relative = WorkspaceScanner.RelativePath(workspaceRoot, absolute);
             var ext = Path.GetExtension(absolute);
+            var rel = relative.Replace("\\", "/", StringComparison.Ordinal);
 
-            insert.Parameters.Clear();
-            insert.Parameters.AddWithValue("$path", relative.Replace("\\", "/", StringComparison.Ordinal));
-            insert.Parameters.AddWithValue("$ext", ext);
-            insert.Parameters.AddWithValue("$body", text);
-            insert.ExecuteNonQuery();
-            filesIndexed++;
+            var chunks = WorkspaceScanner.ChunkByLines(text);
+            var anyChunk = false;
+            foreach (var (lineStart, lineEnd, body) in chunks)
+            {
+                insert.Parameters.Clear();
+                insert.Parameters.AddWithValue("$path", rel);
+                insert.Parameters.AddWithValue("$ext", ext);
+                insert.Parameters.AddWithValue("$ls", lineStart);
+                insert.Parameters.AddWithValue("$le", lineEnd);
+                insert.Parameters.AddWithValue("$body", body);
+                insert.ExecuteNonQuery();
+                anyChunk = true;
+            }
+
+            if (anyChunk)
+                filesIndexed++;
         }
 
         tx.Commit();
@@ -120,7 +131,9 @@ internal static class SqliteFtsIndex
         Exec("""
             CREATE VIRTUAL TABLE chunks USING fts5(
               path,
-              extension,
+              extension UNINDEXED,
+              line_start UNINDEXED,
+              line_end UNINDEXED,
               body,
               tokenize='unicode61 remove_diacritics 1'
             );
@@ -181,7 +194,7 @@ internal static class SqliteFtsIndex
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-             SELECT path, bm25(chunks), snippet(chunks, 2, '[', ']', ' … ', 24)
+             SELECT path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)
              FROM chunks
              WHERE chunks MATCH $q
              ORDER BY bm25(chunks) DESC
@@ -195,9 +208,11 @@ internal static class SqliteFtsIndex
         while (reader.Read())
         {
             var path = reader.GetString(0);
-            var bm = reader.GetDouble(1);
-            var snip = reader.IsDBNull(2) ? null : reader.GetString(2);
-            hits.Add(new IndexHit(path, HitKinds.TextFts, bm, snip, LineStart: 0, LineEnd: 0));
+            var lineStart = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+            var lineEnd = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+            var bm = reader.GetDouble(3);
+            var snip = reader.IsDBNull(4) ? null : reader.GetString(4);
+            hits.Add(new IndexHit(path, HitKinds.TextFts, bm, snip, lineStart, lineEnd));
         }
 
         return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);

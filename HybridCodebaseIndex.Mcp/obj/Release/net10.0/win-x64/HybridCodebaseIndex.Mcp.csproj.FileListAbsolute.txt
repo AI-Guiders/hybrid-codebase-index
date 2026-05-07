@@ -220,3 +220,4 @@ D:\Experiments\PersonalCursorFolder\Financial\software\open\hybrid-codebase-inde
 D:\Experiments\PersonalCursorFolder\Financial\software\open\hybrid-codebase-index\HybridCodebaseIndex.Mcp\obj\Release\net10.0\win-x64\HybridCodebaseIndex.Mcp.pdb
 D:\Experiments\PersonalCursorFolder\Financial\software\open\hybrid-codebase-index\HybridCodebaseIndex.Mcp\obj\Release\net10.0\win-x64\HybridCodebaseIndex.Mcp.genruntimeconfig.cache
 D:\Experiments\PersonalCursorFolder\Financial\software\open\hybrid-codebase-index\HybridCodebaseIndex.Mcp\obj\Release\net10.0\win-x64\ref\HybridCodebaseIndex.Mcp.dll
+D:\Experiments\PersonalCursorFolder\Financial\software\open\hybrid-codebase-index\HybridCodebaseIndex.Mcp\obj\Release\net10.0\win-x64\HybridCodebaseIndex.Mcp.sourcelink.json

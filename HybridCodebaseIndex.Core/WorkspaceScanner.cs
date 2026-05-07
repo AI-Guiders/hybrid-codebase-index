@@ -1,8 +1,12 @@
 namespace HybridCodebaseIndex.Core;
 
+using System.Text;
+
 internal static class WorkspaceScanner
 {
     internal const long MaxIndexedFileBytes = 512 * 1024;
+    internal const int ChunkLines = 110;
+    internal const int ChunkOverlapLines = 15;
 
     private static readonly string[] IndexableGlobExtensions =
     [
@@ -77,5 +81,38 @@ internal static class WorkspaceScanner
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
         filePath = Path.GetFullPath(filePath);
         return Path.GetRelativePath(workspaceRoot, filePath);
+    }
+
+    internal static IEnumerable<(int lineStart, int lineEnd, string body)> ChunkByLines(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            yield break;
+
+        // Normalize line endings so line accounting is stable.
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        if (lines.Length == 0)
+            yield break;
+
+        var chunk = Math.Max(20, ChunkLines);
+        var overlap = Math.Clamp(ChunkOverlapLines, 0, chunk - 1);
+        var step = Math.Max(1, chunk - overlap);
+
+        for (var i = 0; i < lines.Length; i += step)
+        {
+            var endExclusive = Math.Min(lines.Length, i + chunk);
+            var sb = new StringBuilder(capacity: 4096);
+            for (var j = i; j < endExclusive; j++)
+            {
+                if (j > i) sb.Append('\n');
+                sb.Append(lines[j]);
+            }
+
+            // 1-based inclusive line numbers.
+            yield return (i + 1, endExclusive, sb.ToString());
+
+            if (endExclusive == lines.Length)
+                yield break;
+        }
     }
 }
