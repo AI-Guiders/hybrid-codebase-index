@@ -110,6 +110,28 @@ internal static class ToolCatalog
                     required = new[] { "workspace_path", "enabled" },
                 }),
             },
+            new Tool
+            {
+                Name = "codebase_index_verify",
+                Description =
+                    "Анти-галлюцинации: проверить список идентификаторов через индекс (FTS) и вернуть exists/missing + подсказки похожих (prefix search).",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Scope: одна БД на (workspace_root, solution_path)." },
+                        identifiers = new { type = "array", items = new { type = "string" }, description = "Список идентификаторов для проверки (методы/типы/свойства; можно с точками/дженериками)." },
+                        top_n = new { type = "integer", description = "Максимум попаданий на идентификатор (по умолчанию 5)." },
+                        suggestions = new { type = "integer", description = "Максимум подсказок на missing-идентификатор (по умолчанию 8)." },
+                        extensions = new { type = "array", items = new { type = "string" }, description = "Опционально: ограничить расширениями (по умолчанию ['.cs'])." },
+                        path_prefix = new { type = "string", description = "Опционально: ограничить попадания путями, начинающимися с префикса (unix-style)." },
+                        exclude_path_prefixes = new { type = "array", items = new { type = "string" }, description = "Опционально: исключить пути по префиксам (unix-style)." },
+                    },
+                    required = new[] { "workspace_path", "identifiers" },
+                }),
+            },
         ];
     }
 }

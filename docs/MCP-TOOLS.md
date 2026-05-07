@@ -32,5 +32,9 @@ Explain для одного попадания (по hit_id из search): вер
 
 Включить/выключить watcher для авто-инкрементальной индексации (debounced). Важно: это best-effort фоновая синхронизация, не заменяет явный reindex.
 
+### `codebase_index_verify`
+
+Анти-галлюцинации: проверить список идентификаторов через индекс (FTS) и вернуть exists/missing + подсказки похожих (prefix search).
+
 <!-- GENERATED:ToolCatalog END -->
 

@@ -26,6 +26,10 @@
     {
       "name": "codebase_index_watch",
       "description": "Включить/выключить watcher для авто-инкрементальной индексации (debounced). Важно: это best-effort фоновая синхронизация, не заменяет явный reindex."
+    },
+    {
+      "name": "codebase_index_verify",
+      "description": "Анти-галлюцинации: проверить список идентификаторов через индекс (FTS) и вернуть exists/missing + подсказки похожих (prefix search)."
     }
   ]
 }

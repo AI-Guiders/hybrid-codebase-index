@@ -36,6 +36,7 @@ internal static class ToolHandlers
             "codebase_index_status" => HandleStatus(args),
             "codebase_index_reindex" => HandleReindex(args),
             "codebase_index_watch" => HandleWatch(args),
+            "codebase_index_verify" => HandleVerify(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
     }
@@ -184,6 +185,102 @@ internal static class ToolHandlers
         }, JsonOut);
     }
 
+    private static string HandleVerify(IReadOnlyDictionary<string, JsonElement> args)
+    {
+        var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
+        var ids = RequireStringArray(args, "identifiers");
+
+        var topN = OptionalInt(args, "top_n") ?? 5;
+        if (topN < 1) topN = 1;
+        if (topN > 25) topN = 25;
+
+        var suggestions = OptionalInt(args, "suggestions") ?? 8;
+        if (suggestions < 0) suggestions = 0;
+        if (suggestions > 25) suggestions = 25;
+
+        var pathPrefix = OptionalString(args, "path_prefix");
+        var excludePrefixes = OptionalStringArray(args, "exclude_path_prefixes");
+        var extensions = OptionalStringArray(args, "extensions") ?? [".cs"];
+
+        static string NormalizeId(string s)
+        {
+            // Best-effort token for FTS: strip obvious punctuation so prefix search works better.
+            // Keep dots/underscores because they're meaningful in namespaces/member access for humans.
+            return s.Trim();
+        }
+
+        static string PrefixToken(string id)
+        {
+            // Take the last segment (Foo.Bar.Baz -> Baz) for suggestions.
+            var lastDot = id.LastIndexOf('.');
+            var token = lastDot >= 0 ? id[(lastDot + 1)..] : id;
+            token = token.Trim();
+            if (token.Length > 24)
+                token = token[..24];
+            return token;
+        }
+
+        var results = new List<VerifyItemDto>(capacity: ids.Count);
+
+        foreach (var raw in ids)
+        {
+            var id = NormalizeId(raw);
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            var (resp, err) = Service.SearchAsync(ws, sln, id, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
+            if (!string.IsNullOrEmpty(err))
+            {
+                results.Add(new VerifyItemDto(id, Exists: false, Err: err, Hits: [], Suggestions: []));
+                continue;
+            }
+
+            var hits = resp.Hits
+                .Take(topN)
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount))
+                .ToList();
+
+            if (hits.Count > 0)
+            {
+                results.Add(new VerifyItemDto(id, Exists: true, Err: null, Hits: hits, Suggestions: []));
+                continue;
+            }
+
+            if (suggestions == 0)
+            {
+                results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: []));
+                continue;
+            }
+
+            var token = PrefixToken(id);
+            var q = token.Length == 0 ? id : $"{token}*";
+            var (sugResp, sugErr) = Service.SearchAsync(ws, sln, q, Math.Max(suggestions, 5), pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
+            if (!string.IsNullOrEmpty(sugErr))
+            {
+                results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: []));
+                continue;
+            }
+
+            var sug = sugResp.Hits
+                .Take(suggestions)
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount))
+                .ToList();
+
+            results.Add(new VerifyItemDto(id, Exists: false, Err: null, Hits: [], Suggestions: sug));
+        }
+
+        return JsonSerializer.Serialize(new VerifyResultDto(
+            WorkspacePath: ws,
+            SolutionPath: sln,
+            Extensions: extensions,
+            PathPrefix: pathPrefix,
+            ExcludePathPrefixes: excludePrefixes,
+            TopN: topN,
+            Suggestions: suggestions,
+            Items: results), JsonOut);
+    }
+
     private static string RequireString(IReadOnlyDictionary<string, JsonElement> args, string key)
     {
         if (!args.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.String)
@@ -226,6 +323,27 @@ internal static class ToolHandlers
                 list.Add(s.Trim());
         }
         return list.Count == 0 ? null : list;
+    }
+
+    private static List<string> RequireStringArray(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el) || el.ValueKind != JsonValueKind.Array)
+            throw new ArgumentException($"Missing or invalid '{key}' (string[] required).");
+
+        var list = new List<string>();
+        foreach (var it in el.EnumerateArray())
+        {
+            if (it.ValueKind != JsonValueKind.String)
+                continue;
+            var s = it.GetString();
+            if (!string.IsNullOrWhiteSpace(s))
+                list.Add(s.Trim());
+        }
+
+        if (list.Count == 0)
+            throw new ArgumentException($"Missing or invalid '{key}' (string[] required).");
+
+        return list;
     }
 
     private static bool? OptionalBool(IReadOnlyDictionary<string, JsonElement> args, string key)
@@ -328,4 +446,21 @@ internal static class ToolHandlers
         string RuntimeIdentifier,
         string OsDescription,
         string ProcessArchitecture);
+
+    private sealed record VerifyResultDto(
+        string WorkspacePath,
+        string? SolutionPath,
+        List<string> Extensions,
+        string? PathPrefix,
+        List<string>? ExcludePathPrefixes,
+        int TopN,
+        int Suggestions,
+        List<VerifyItemDto> Items);
+
+    private sealed record VerifyItemDto(
+        string Identifier,
+        bool Exists,
+        string? Err,
+        List<HitDto> Hits,
+        List<HitDto> Suggestions);
 }
