@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dgSpecHash": "ZZ7ayWyPqbY=",
+  "success": true,
+  "projectFilePath": "D:\\Experiments\\PersonalCursorFolder\\Financial\\software\\open\\hybrid-codebase-index\\HybridCodebaseIndex.Mcp\\HybridCodebaseIndex.Mcp.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.data.sqlite\\9.0.12\\microsoft.data.sqlite.9.0.12.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.data.sqlite.core\\9.0.12\\microsoft.data.sqlite.core.9.0.12.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.ai.abstractions\\10.2.0\\microsoft.extensions.ai.abstractions.10.2.0.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.caching.abstractions\\10.0.2\\microsoft.extensions.caching.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\10.0.2\\microsoft.extensions.configuration.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.2\\microsoft.extensions.dependencyinjection.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.diagnostics.abstractions\\10.0.2\\microsoft.extensions.diagnostics.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.fileproviders.abstractions\\10.0.2\\microsoft.extensions.fileproviders.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.hosting.abstractions\\10.0.2\\microsoft.extensions.hosting.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\10.0.2\\microsoft.extensions.logging.abstractions.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.options\\10.0.2\\microsoft.extensions.options.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.extensions.primitives\\10.0.2\\microsoft.extensions.primitives.10.0.2.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\modelcontextprotocol\\0.8.0-preview.1\\modelcontextprotocol.0.8.0-preview.1.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\modelcontextprotocol.core\\0.8.0-preview.1\\modelcontextprotocol.core.0.8.0-preview.1.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\sqlitepclraw.bundle_e_sqlite3\\2.1.10\\sqlitepclraw.bundle_e_sqlite3.2.1.10.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\sqlitepclraw.core\\2.1.10\\sqlitepclraw.core.2.1.10.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\sqlitepclraw.lib.e_sqlite3\\2.1.10\\sqlitepclraw.lib.e_sqlite3.2.1.10.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\sqlitepclraw.provider.e_sqlite3\\2.1.10\\sqlitepclraw.provider.e_sqlite3.2.1.10.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\10.0.7\\microsoft.netcore.app.runtime.win-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.netcore.app.runtime.linux-x64\\10.0.7\\microsoft.netcore.app.runtime.linux-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\10.0.7\\microsoft.windowsdesktop.app.runtime.win-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\10.0.7\\microsoft.aspnetcore.app.runtime.win-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.linux-x64\\10.0.7\\microsoft.aspnetcore.app.runtime.linux-x64.10.0.7.nupkg.sha512",
+    "C:\\Users\\dkara\\.nuget\\packages\\microsoft.netcore.app.host.linux-x64\\10.0.7\\microsoft.netcore.app.host.linux-x64.10.0.7.nupkg.sha512"
+  ],
+  "logs": []
+}
