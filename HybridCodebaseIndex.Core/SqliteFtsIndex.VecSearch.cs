@@ -141,7 +141,7 @@ internal static partial class SqliteFtsIndex
         if (hits.Count == 0)
             return hits;
 
-        var allowed = settings.GetEffectiveExtensionsSet();
+        var allowed = settings.GetEffectiveVecExtensionsSet();
         if (allowed.Count == 0)
             return [];
 
@@ -186,8 +186,8 @@ internal static partial class SqliteFtsIndex
 
     private static List<(long chunkRowId, double sim)> VecTopK(SqliteConnection conn, float[] qv, double qn, int k, IndexSettings settings)
     {
-        var allowedList = settings.GetEffectiveExtensions();
-        if (allowedList.Count == 0)
+        var allowed = settings.GetEffectiveVecExtensionsSet();
+        if (allowed.Count == 0)
             return [];
 
         using var cmd = conn.CreateCommand();
@@ -198,13 +198,14 @@ internal static partial class SqliteFtsIndex
             WHERE lower(c.extension) IN (
             """);
 
-        for (var i = 0; i < allowedList.Count; i++)
+        var allowedList = allowed.Select(static e => e.ToLowerInvariant()).OrderBy(static e => e, StringComparer.Ordinal).ToArray();
+        for (var i = 0; i < allowedList.Length; i++)
         {
             if (i > 0)
                 sb.Append(',');
             var p = "$e" + i.ToString(CultureInfo.InvariantCulture);
             sb.Append(p);
-            cmd.Parameters.AddWithValue(p, allowedList[i].ToLowerInvariant());
+            cmd.Parameters.AddWithValue(p, allowedList[i]);
         }
 
         sb.Append(");");

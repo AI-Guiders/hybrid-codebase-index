@@ -69,6 +69,16 @@ embedding_do_lower_case = true
 # If the file is missing (e.g. Linux), load is skipped without error.
 sqlite_vec_extension_path = "vec0.dll"
 
+# Extensions policy for vec (embeddings and KNN channel).
+# Default: inherit effective extensions from [fts], then apply add/remove.
+# - vec_extensions_mode = "inherit_fts" | "custom"
+# - vec_extensions: base list when mode="custom" (normalized with dots)
+# - vec_add_extensions / vec_remove_extensions: overrides (normalized with dots)
+vec_extensions_mode = "inherit_fts"
+vec_extensions = []
+vec_add_extensions = []
+vec_remove_extensions = []
+
 # For token-based models: sequence length (0 = provider default, typically 128..256).
 embedding_sequence_length = 0
 

@@ -46,7 +46,7 @@ internal static partial class SqliteFtsIndex
         if (!settings.SemanticEnabled)
             return (0, "semantic_enabled=false in settings; enable it to build vectors.");
 
-        var allowedExt = settings.GetEffectiveExtensionsSet();
+        var allowedExt = settings.GetEffectiveVecExtensionsSet();
 
         var provider = EmbeddingProviderFactory.Create(settings, Path.GetDirectoryName(dbPath));
         var dim = provider.Dimension;
@@ -55,7 +55,7 @@ internal static partial class SqliteFtsIndex
         var sqliteVecAvailable = SqliteVecInterop.TryEnableAndLoad(conn, settings, indexDir, out _)
             && SqliteVecInterop.TryEnsureVecChunksTable(conn, dim, out _);
 
-        // Vec использует те же допустимые расширения, что FTS (исключения fts.exclude_extensions и пр.).
+        // Vec может наследовать FTS effective extensions, но допускает override через semantic.vec_*.
         PruneVectorsAndVecChunksOutsideAllowedExtensions(conn, allowedExt, sqliteVecAvailable);
 
         if (allowedExt.Count == 0)

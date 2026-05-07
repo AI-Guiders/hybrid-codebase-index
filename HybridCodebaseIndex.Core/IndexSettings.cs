@@ -22,6 +22,10 @@ public sealed record IndexSettings(
     string? EmbeddingModelPath,
     string? EmbeddingVocabPath,
     bool EmbeddingDoLowerCase,
+    string? VecExtensionsMode,
+    IReadOnlyList<string>? VecExtensions,
+    IReadOnlyList<string>? VecAddExtensions,
+    IReadOnlyList<string>? VecRemoveExtensions,
     string? SqliteVecExtensionPath,
     int EmbeddingSequenceLength,
     bool EmbeddingPreferGpu)
@@ -45,6 +49,10 @@ public sealed record IndexSettings(
         EmbeddingModelPath: null,
         EmbeddingVocabPath: null,
         EmbeddingDoLowerCase: true,
+        VecExtensionsMode: "inherit_fts",
+        VecExtensions: null,
+        VecAddExtensions: null,
+        VecRemoveExtensions: null,
         SqliteVecExtensionPath: null,
         EmbeddingSequenceLength: 0,
         EmbeddingPreferGpu: true);
@@ -106,6 +114,10 @@ public sealed record IndexSettings(
         var embeddingModelPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_model_path") ?? ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
         var embeddingVocabPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_vocab_path") ?? ReadString(diskModel, embeddedModel, "embedding_vocab_path") ?? Default.EmbeddingVocabPath;
         var embeddingDoLowerCase = ReadBool(diskModel, embeddedModel, "semantic", "embedding_do_lower_case") ?? ReadBool(diskModel, embeddedModel, "embedding_do_lower_case") ?? Default.EmbeddingDoLowerCase;
+        var vecExtensionsMode = ReadString(diskModel, embeddedModel, "semantic", "vec_extensions_mode") ?? Default.VecExtensionsMode;
+        var vecExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_extensions"));
+        var vecAddExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_add_extensions"));
+        var vecRemoveExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_remove_extensions"));
         var sqliteVecExtensionPath = ReadString(diskModel, embeddedModel, "semantic", "sqlite_vec_extension_path") ?? ReadString(diskModel, embeddedModel, "sqlite_vec_extension_path") ?? Default.SqliteVecExtensionPath;
         var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "semantic", "embedding_sequence_length") ?? ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
         var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "semantic", "embedding_prefer_gpu") ?? ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
@@ -129,6 +141,10 @@ public sealed record IndexSettings(
             embeddingModelPath,
             embeddingVocabPath,
             embeddingDoLowerCase,
+            vecExtensionsMode,
+            vecExtensions,
+            vecAddExtensions,
+            vecRemoveExtensions,
             sqliteVecExtensionPath,
             embeddingSeqLen,
             embeddingPreferGpu);
@@ -180,6 +196,32 @@ public sealed record IndexSettings(
     /// <summary>Те же правила, что <see cref="GetEffectiveExtensions"/>, для vec и проверок на границе поиска.</summary>
     public HashSet<string> GetEffectiveExtensionsSet()
         => new(GetEffectiveExtensions(), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Эффективные расширения для vec.
+    /// По умолчанию наследует effective extensions от FTS и применяет add/remove.
+    /// При <c>vec_extensions_mode="custom"</c> может использовать базовый список <c>semantic.vec_extensions</c>.
+    /// </summary>
+    public HashSet<string> GetEffectiveVecExtensionsSet()
+    {
+        HashSet<string> set;
+
+        var mode = (VecExtensionsMode ?? "inherit_fts").Trim().ToLowerInvariant();
+        if (string.Equals(mode, "custom", StringComparison.OrdinalIgnoreCase) && VecExtensions is { Count: > 0 })
+            set = new HashSet<string>(VecExtensions, StringComparer.OrdinalIgnoreCase);
+        else
+            set = GetEffectiveExtensionsSet();
+
+        if (VecRemoveExtensions is { Count: > 0 })
+            foreach (var ext in VecRemoveExtensions)
+                set.Remove(ext);
+
+        if (VecAddExtensions is { Count: > 0 })
+            foreach (var ext in VecAddExtensions)
+                set.Add(ext);
+
+        return set;
+    }
 
     private static TomlTable? TryReadEmbeddedModel(out string? error)
     {
