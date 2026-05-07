@@ -33,12 +33,15 @@ public sealed record IndexStatus(
     string DatabasePath,
     bool DatabaseExists,
     int DocumentCount,
+    bool DocumentCountMayBeStale,
     string? IndexedAtIso,
     string? WorkspaceRootNormalized,
     string? LastReindexError,
     string? LastReindexErrorAtIso,
     string SettingsSource,
-    string? SettingsParseError);
+    string? SettingsParseError,
+    string? ReindexState,
+    string? ReindexStartedAtIso);
 
 public sealed record ReindexSummary(
     int IndexFormatVersion,

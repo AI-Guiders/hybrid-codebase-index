@@ -103,12 +103,15 @@ internal static class ToolHandlers
             DatabasePath: st.DatabasePath,
             DatabaseExists: st.DatabaseExists,
             DocumentCount: st.DocumentCount,
+            DocumentCountMayBeStale: st.DocumentCountMayBeStale,
             IndexedAtIso: st.IndexedAtIso,
             WorkspaceRoot: st.WorkspaceRootNormalized,
             LastReindexError: st.LastReindexError,
             LastReindexErrorAtIso: st.LastReindexErrorAtIso,
             SettingsSource: st.SettingsSource,
-            SettingsParseError: st.SettingsParseError);
+            SettingsParseError: st.SettingsParseError,
+            ReindexState: st.ReindexState,
+            ReindexStartedAtIso: st.ReindexStartedAtIso);
 
         // Keep the contract stable: include nullable fields explicitly.
         return JsonSerializer.Serialize(dto, JsonOutWithNulls);
@@ -188,12 +191,15 @@ internal static class ToolHandlers
         string DatabasePath,
         bool DatabaseExists,
         int DocumentCount,
+        bool DocumentCountMayBeStale,
         string? IndexedAtIso,
         string? WorkspaceRoot,
         string? LastReindexError,
         string? LastReindexErrorAtIso,
         string SettingsSource,
-        string? SettingsParseError);
+        string? SettingsParseError,
+        string? ReindexState,
+        string? ReindexStartedAtIso);
 
     private sealed record ReindexResultDto(
         int IndexFormatVersion,

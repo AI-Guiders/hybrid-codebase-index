@@ -97,6 +97,9 @@ internal static class SqliteFtsIndex
 
         try
         {
+            UpsertMeta(conn, "reindex_state", "running");
+            UpsertMeta(conn, "reindex_started_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+
             var settings = IndexSettings.TryLoadFromIndexDirectory(Path.GetDirectoryName(dbPath)!);
             var extensions = settings.GetEffectiveExtensions();
 
@@ -243,14 +246,19 @@ internal static class SqliteFtsIndex
             // Clear last error on success.
             UpsertMeta(conn, "reindex_error", "");
             UpsertMeta(conn, "reindex_error_at", "");
+
+            UpsertMeta(conn, "reindex_state", "idle");
+            UpsertMeta(conn, "reindex_started_at", "");
         }
         catch (Exception ex)
         {
             // Best-effort: store the last failure so status can surface it.
             try
             {
+                UpsertMeta(conn, "reindex_state", "error");
                 UpsertMeta(conn, "reindex_error", ex.GetType().Name + ": " + ex.Message);
                 UpsertMeta(conn, "reindex_error_at", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                // keep started_at as-is
             }
             catch
             {
@@ -495,13 +503,19 @@ internal static class SqliteFtsIndex
                 out _,
                 out var src,
                 out var err);
-            return new IndexStatus(FormatVersion, dbPath, false, 0, null, workspaceRoot, null, null, src, err);
+            return new IndexStatus(FormatVersion, dbPath, false, 0, false, null, workspaceRoot, null, null, src, err, null, null);
         }
 
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
 
         var indexedAt = ReadMeta(conn, "indexed_at");
+        var reindexState = ReadMeta(conn, "reindex_state");
+        if (string.IsNullOrWhiteSpace(reindexState))
+            reindexState = null;
+        var reindexStartedAt = ReadMeta(conn, "reindex_started_at");
+        if (string.IsNullOrWhiteSpace(reindexStartedAt))
+            reindexStartedAt = null;
         var lastErr = ReadMeta(conn, "reindex_error");
         if (string.IsNullOrWhiteSpace(lastErr))
             lastErr = null;
@@ -517,7 +531,21 @@ internal static class SqliteFtsIndex
         using var countCmd = conn.CreateCommand();
         countCmd.CommandText = "SELECT count(*) FROM chunks;";
         var docCount = Convert.ToInt32(countCmd.ExecuteScalar() ?? 0);
-        return new IndexStatus(FormatVersion, dbPath, true, docCount, indexedAt, workspaceRoot, lastErr, lastErrAt, settingsSource, settingsParseError);
+        var mayBeStale = string.Equals(reindexState, "running", StringComparison.OrdinalIgnoreCase);
+        return new IndexStatus(
+            FormatVersion,
+            dbPath,
+            true,
+            docCount,
+            mayBeStale,
+            indexedAt,
+            workspaceRoot,
+            lastErr,
+            lastErrAt,
+            settingsSource,
+            settingsParseError,
+            reindexState,
+            reindexStartedAt);
     }
 
     private static string? ReadMeta(SqliteConnection conn, string key)
