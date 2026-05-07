@@ -1,11 +1,7 @@
 # Build outputs
 **/bin/
 **/obj/
+# Local index db (workspace runtime data)
+.cascade-ide/
 # Publish output (local)
 publish/
-# Rider/VS
-.idea/
-.vs/
-# OS
-.DS_Store
-Thumbs.db
