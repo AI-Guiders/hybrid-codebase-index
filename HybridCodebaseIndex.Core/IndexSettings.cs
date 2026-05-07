@@ -15,19 +15,6 @@ public sealed record IndexSettings(
         IncludeExtensions: null,
         ExcludeExtensions: null);
 
-    internal static readonly string[] DefaultExtensionsWithoutCs =
-    [
-        ".md", ".mdx", ".csproj", ".slnx", ".props", ".targets", ".toml",
-        ".editorconfig", ".json", ".yml", ".yaml", ".razor",
-        ".css", ".scss", ".html", ".axaml",
-    ];
-
-    internal static readonly string[] DefaultExtensionsWithCs =
-    [
-        ..DefaultExtensionsWithoutCs,
-        ".cs",
-    ];
-
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
         _ = TryLoadFromIndexDirectoryWithDiagnostics(indexDirectory, out var settings, out _, out _);
@@ -82,7 +69,9 @@ public sealed record IndexSettings(
         }
         else
         {
-            baseList = IncludeCsInFts ? DefaultExtensionsWithCs : DefaultExtensionsWithoutCs;
+            // Embedded TOML is the canonical source of defaults; if it failed to load,
+            // we prefer an explicit empty set instead of silently indexing an implicit list.
+            baseList = [];
         }
 
         if (ExcludeExtensions is not { Count: > 0 })
