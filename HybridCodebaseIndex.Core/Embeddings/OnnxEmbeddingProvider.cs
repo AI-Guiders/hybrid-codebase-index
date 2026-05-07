@@ -1,5 +1,4 @@
 using System.Globalization;
-using BERTTokenizers;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -8,7 +7,7 @@ namespace HybridCodebaseIndex.Core.Embeddings;
 internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 {
     private readonly InferenceSession _session;
-    private readonly BertBaseTokenizer _tokenizer;
+    private readonly WordPieceTokenizer _tokenizer;
     private readonly string _inputIdsName;
     private readonly string _attentionMaskName;
     private readonly string? _tokenTypeIdsName;
@@ -18,10 +17,12 @@ internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 
     public int Dimension { get; }
 
-    public OnnxEmbeddingProvider(string modelPath, int seqLen, bool preferGpu)
+    public OnnxEmbeddingProvider(string modelPath, string? vocabPath, bool doLowerCase, int seqLen, bool preferGpu)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("embedding_model_path is required for embedding_provider=onnx.", nameof(modelPath));
+        if (string.IsNullOrWhiteSpace(vocabPath))
+            throw new ArgumentException("embedding_vocab_path is required for embedding_provider=onnx.", nameof(vocabPath));
 
         _seqLen = Math.Clamp(seqLen, 32, 512);
 
@@ -40,7 +41,7 @@ internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
         }
 
         _session = new InferenceSession(modelPath, opts);
-        _tokenizer = new BertBaseTokenizer();
+        _tokenizer = WordPieceTokenizer.FromVocabFile(vocabPath, doLowerCase);
 
         var inputs = _session.InputMetadata;
         _inputIdsName = FindKey(inputs, ["input_ids", "inputIds", "input_ids:0"]) ?? inputs.Keys.First();
@@ -59,7 +60,7 @@ internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     public ValueTask<float[]> EmbedAsync(string text, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var encoded = _tokenizer.Encode(_seqLen, text ?? "");
+        var (ids, mask, typeIdsArr) = _tokenizer.Encode(text ?? "", _seqLen);
 
         var inputIds = new DenseTensor<long>(new[] { 1, _seqLen });
         var attn = new DenseTensor<long>(new[] { 1, _seqLen });
@@ -67,11 +68,10 @@ internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
 
         for (var i = 0; i < _seqLen; i++)
         {
-            var t = encoded[i];
-            inputIds[0, i] = t.InputIds;
-            attn[0, i] = t.AttentionMask;
+            inputIds[0, i] = ids[i];
+            attn[0, i] = mask[i];
             if (typeIds is not null)
-                typeIds[0, i] = t.TokenTypeIds;
+                typeIds[0, i] = typeIdsArr[i];
         }
 
         var inputs = new List<NamedOnnxValue>(capacity: typeIds is null ? 2 : 3)

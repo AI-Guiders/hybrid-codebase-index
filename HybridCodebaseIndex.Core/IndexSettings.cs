@@ -20,6 +20,8 @@ public sealed record IndexSettings(
     string? EmbeddingModel,
     int EmbeddingDim,
     string? EmbeddingModelPath,
+    string? EmbeddingVocabPath,
+    bool EmbeddingDoLowerCase,
     int EmbeddingSequenceLength,
     bool EmbeddingPreferGpu)
 {
@@ -40,6 +42,8 @@ public sealed record IndexSettings(
         EmbeddingModel: null,
         EmbeddingDim: 0,
         EmbeddingModelPath: null,
+        EmbeddingVocabPath: null,
+        EmbeddingDoLowerCase: true,
         EmbeddingSequenceLength: 0,
         EmbeddingPreferGpu: true);
 
@@ -79,26 +83,29 @@ public sealed record IndexSettings(
             settingsSource = "embedded";
 
         // Merge: embedded = base, disk = overlay.
-        var includeCs = ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
-        var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
-        var excludeRoots = ReadStringArray(diskModel, embeddedModel, "exclude_roots") ?? [];
-        var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
-        var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
-        var excludeSegments = ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
-        var ignoreFiles = ReadStringArray(diskModel, embeddedModel, "ignore_files") ?? [];
+        // New format: sectioned tables (recommended). Old format: flat keys (back-compat).
+        var includeCs = ReadBool(diskModel, embeddedModel, "fts", "include_cs_in_fts") ?? ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
+        var extraRoots = ReadStringArray(diskModel, embeddedModel, "scope", "extra_include_roots") ?? ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
+        var excludeRoots = ReadStringArray(diskModel, embeddedModel, "scope", "exclude_roots") ?? ReadStringArray(diskModel, embeddedModel, "exclude_roots") ?? [];
+        var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "fts", "include_extensions") ?? ReadStringArray(diskModel, embeddedModel, "include_extensions"));
+        var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "fts", "exclude_extensions") ?? ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
+        var excludeSegments = ReadStringArray(diskModel, embeddedModel, "scope", "exclude_path_segments") ?? ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
+        var ignoreFiles = ReadStringArray(diskModel, embeddedModel, "scope", "ignore_files") ?? ReadStringArray(diskModel, embeddedModel, "ignore_files") ?? [];
 
-        var maxBytes = ReadLong(diskModel, embeddedModel, "max_indexed_file_bytes") ?? 0;
-        var chunkLines = ReadInt(diskModel, embeddedModel, "chunk_lines") ?? 0;
-        var overlapLines = ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
-        var probeBytes = ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
+        var maxBytes = ReadLong(diskModel, embeddedModel, "fts", "max_indexed_file_bytes") ?? ReadLong(diskModel, embeddedModel, "max_indexed_file_bytes") ?? 0;
+        var chunkLines = ReadInt(diskModel, embeddedModel, "fts", "chunk_lines") ?? ReadInt(diskModel, embeddedModel, "chunk_lines") ?? 0;
+        var overlapLines = ReadInt(diskModel, embeddedModel, "fts", "chunk_overlap_lines") ?? ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
+        var probeBytes = ReadInt(diskModel, embeddedModel, "fts", "binary_probe_bytes") ?? ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
 
-        var semanticEnabled = ReadBool(diskModel, embeddedModel, "semantic_enabled") ?? Default.SemanticEnabled;
-        var embeddingProvider = ReadString(diskModel, embeddedModel, "embedding_provider") ?? Default.EmbeddingProvider;
-        var embeddingModel = ReadString(diskModel, embeddedModel, "embedding_model") ?? Default.EmbeddingModel;
-        var embeddingDim = ReadInt(diskModel, embeddedModel, "embedding_dim") ?? Default.EmbeddingDim;
-        var embeddingModelPath = ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
-        var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
-        var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
+        var semanticEnabled = ReadBool(diskModel, embeddedModel, "semantic", "enabled") ?? ReadBool(diskModel, embeddedModel, "semantic_enabled") ?? Default.SemanticEnabled;
+        var embeddingProvider = ReadString(diskModel, embeddedModel, "semantic", "embedding_provider") ?? ReadString(diskModel, embeddedModel, "embedding_provider") ?? Default.EmbeddingProvider;
+        var embeddingModel = ReadString(diskModel, embeddedModel, "semantic", "embedding_model") ?? ReadString(diskModel, embeddedModel, "embedding_model") ?? Default.EmbeddingModel;
+        var embeddingDim = ReadInt(diskModel, embeddedModel, "semantic", "embedding_dim") ?? ReadInt(diskModel, embeddedModel, "embedding_dim") ?? Default.EmbeddingDim;
+        var embeddingModelPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_model_path") ?? ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
+        var embeddingVocabPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_vocab_path") ?? ReadString(diskModel, embeddedModel, "embedding_vocab_path") ?? Default.EmbeddingVocabPath;
+        var embeddingDoLowerCase = ReadBool(diskModel, embeddedModel, "semantic", "embedding_do_lower_case") ?? ReadBool(diskModel, embeddedModel, "embedding_do_lower_case") ?? Default.EmbeddingDoLowerCase;
+        var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "semantic", "embedding_sequence_length") ?? ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
+        var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "semantic", "embedding_prefer_gpu") ?? ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
 
         settings = new IndexSettings(
             includeCs,
@@ -117,6 +124,8 @@ public sealed record IndexSettings(
             embeddingModel,
             embeddingDim,
             embeddingModelPath,
+            embeddingVocabPath,
+            embeddingDoLowerCase,
             embeddingSeqLen,
             embeddingPreferGpu);
         return true;
@@ -204,6 +213,9 @@ public sealed record IndexSettings(
         return null;
     }
 
+    private static bool? ReadBool(TomlTable? overlay, TomlTable? baseModel, string section, string key)
+        => ReadBool(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
+
     private static int? ReadInt(TomlTable? overlay, TomlTable? baseModel, string key)
     {
         if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
@@ -213,6 +225,9 @@ public sealed record IndexSettings(
         return null;
     }
 
+    private static int? ReadInt(TomlTable? overlay, TomlTable? baseModel, string section, string key)
+        => ReadInt(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
+
     private static long? ReadLong(TomlTable? overlay, TomlTable? baseModel, string key)
     {
         if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
@@ -221,6 +236,9 @@ public sealed record IndexSettings(
             return ll;
         return null;
     }
+
+    private static long? ReadLong(TomlTable? overlay, TomlTable? baseModel, string section, string key)
+        => ReadLong(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
 
     private static List<string>? ReadStringArray(TomlTable? overlay, TomlTable? baseModel, string key)
     {
@@ -240,6 +258,9 @@ public sealed record IndexSettings(
         return list;
     }
 
+    private static List<string>? ReadStringArray(TomlTable? overlay, TomlTable? baseModel, string section, string key)
+        => ReadStringArray(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
+
     private static string? ReadString(TomlTable? overlay, TomlTable? baseModel, string key)
     {
         if (overlay is not null && overlay.TryGetValue(key, out var v) && v is string s)
@@ -248,6 +269,12 @@ public sealed record IndexSettings(
             return string.IsNullOrWhiteSpace(ss) ? null : ss.Trim();
         return null;
     }
+
+    private static string? ReadString(TomlTable? overlay, TomlTable? baseModel, string section, string key)
+        => ReadString(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
+
+    private static TomlTable? TryGetTable(TomlTable? root, string key)
+        => root is not null && root.TryGetValue(key, out var v) && v is TomlTable t ? t : null;
 
     private static List<string>? NormalizeExtensions(List<string>? raw)
     {

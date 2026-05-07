@@ -51,7 +51,7 @@ internal static partial class SqliteFtsIndex
             if (!string.IsNullOrWhiteSpace(pathPrefix))
             {
                 var pfx = NormalizePathPrefix(pathPrefix);
-                sql.AppendLine("  AND path LIKE $pfx ESCAPE '\\'");
+                sql.AppendLine("  AND chunks.path LIKE $pfx ESCAPE '\\'");
                 cmd.Parameters.AddWithValue("$pfx", EscapeLike(pfx) + "%");
             }
 
@@ -64,7 +64,7 @@ internal static partial class SqliteFtsIndex
                     if (p.Length == 0)
                         continue;
                     var key = "$xp" + i++;
-                    sql.AppendLine($"  AND path NOT LIKE {key} ESCAPE '\\'");
+                    sql.AppendLine($"  AND chunks.path NOT LIKE {key} ESCAPE '\\'");
                     cmd.Parameters.AddWithValue(key, EscapeLike(p) + "%");
                 }
             }

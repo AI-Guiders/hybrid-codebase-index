@@ -19,9 +19,18 @@ internal static class EmbeddingProviderFactory
         if (!string.IsNullOrWhiteSpace(modelPath) && !Path.IsPathRooted(modelPath) && !string.IsNullOrWhiteSpace(indexDirectory))
             modelPath = Path.Combine(indexDirectory, modelPath);
 
+        var vocabPath = settings.EmbeddingVocabPath;
+        if (!string.IsNullOrWhiteSpace(vocabPath) && !Path.IsPathRooted(vocabPath) && !string.IsNullOrWhiteSpace(indexDirectory))
+            vocabPath = Path.Combine(indexDirectory, vocabPath);
+
         var seqLen = settings.EmbeddingSequenceLength > 0 ? settings.EmbeddingSequenceLength : 128;
         var preferGpu = settings.EmbeddingPreferGpu;
-        return new OnnxEmbeddingProvider(modelPath ?? "", seqLen, preferGpu);
+        return new OnnxEmbeddingProvider(
+            modelPath: modelPath ?? "",
+            vocabPath: vocabPath,
+            doLowerCase: settings.EmbeddingDoLowerCase,
+            seqLen: seqLen,
+            preferGpu: preferGpu);
     }
 }
 
