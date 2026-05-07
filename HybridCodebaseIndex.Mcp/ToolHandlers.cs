@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HybridCodebaseIndex.Core;
@@ -21,12 +22,31 @@ internal static class ToolHandlers
         args ??= FrozenDictionary<string, JsonElement>.Empty;
         return name switch
         {
+            "codebase_index_version" => HandleVersion(),
             "codebase_index_search" => HandleSearch(args),
             "codebase_index_explain" => HandleExplain(args),
             "codebase_index_status" => HandleStatus(args),
             "codebase_index_reindex" => HandleReindex(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
+    }
+
+    private static string HandleVersion()
+    {
+        var asm = typeof(ToolHandlers).Assembly;
+        var name = asm.GetName();
+        var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+        var dto = new VersionResultDto(
+            AssemblyName: name.Name ?? "unknown",
+            AssemblyVersion: name.Version?.ToString(),
+            InformationalVersion: info,
+            FrameworkDescription: System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+            RuntimeIdentifier: System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+            OsDescription: System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            ProcessArchitecture: System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString());
+
+        return JsonSerializer.Serialize(dto, JsonOut);
     }
 
     private static string HandleSearch(IReadOnlyDictionary<string, JsonElement> args)
@@ -176,4 +196,13 @@ internal static class ToolHandlers
     private sealed record SkippedDto(
         string Path,
         string Reason);
+
+    private sealed record VersionResultDto(
+        string AssemblyName,
+        string? AssemblyVersion,
+        string? InformationalVersion,
+        string FrameworkDescription,
+        string RuntimeIdentifier,
+        string OsDescription,
+        string ProcessArchitecture);
 }

@@ -10,6 +10,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>HybridCodebaseIndex.Mcp</RootNamespace>
     <AssemblyName>HybridCodebaseIndex.Mcp</AssemblyName>
+
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

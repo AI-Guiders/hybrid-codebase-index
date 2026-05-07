@@ -16,6 +16,16 @@ internal static class ToolCatalog
         [
             new Tool
             {
+                Name = "codebase_index_version",
+                Description = "Версия MCP сервера: assembly version + informational version (commit), runtime.",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new { },
+                }),
+            },
+            new Tool
+            {
                 Name = "codebase_index_search",
                 Description =
                     "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5, ADR 0105). hit_kind=text_fts. До reindex база может отсутствовать.",
