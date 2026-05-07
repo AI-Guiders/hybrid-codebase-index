@@ -37,28 +37,14 @@ public sealed record IndexSettings(
 
             var dir = Path.GetFullPath(indexDirectory.TrimEnd(Path.DirectorySeparatorChar));
             var path = Path.Combine(dir, "settings.toml");
-            string text;
-            if (File.Exists(path))
-            {
-                text = File.ReadAllText(path);
-            }
-            else if (BundledContent.TryReadEmbeddedText("DefaultSettings/settings.default.toml", out var embedded))
-            {
-                text = embedded;
-            }
-            else
-            {
-                return Default;
-            }
+            var embeddedModel = TryReadEmbeddedModel();
+            var diskModel = File.Exists(path) ? TryReadDiskModel(path) : null;
 
-            var model = TomlSerializer.Deserialize<TomlTable>(text);
-            if (model is null)
-                return Default;
-
-            var includeCs = ReadBool(model, "include_cs_in_fts") ?? Default.IncludeCsInFts;
-            var extraRoots = ReadStringArray(model, "extra_include_roots") ?? [];
-            var includeExt = NormalizeExtensions(ReadStringArray(model, "include_extensions"));
-            var excludeExt = NormalizeExtensions(ReadStringArray(model, "exclude_extensions"));
+            // Merge: embedded = base, disk = overlay.
+            var includeCs = ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
+            var extraRoots = ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
+            var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "include_extensions"));
+            var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
 
             return new IndexSettings(includeCs, extraRoots, includeExt, excludeExt);
         }
@@ -87,12 +73,50 @@ public sealed record IndexSettings(
         return baseList.Where(e => !deny.Contains(e)).ToArray();
     }
 
-    private static bool? ReadBool(TomlTable t, string key)
-        => t.TryGetValue(key, out var v) && v is bool b ? b : null;
-
-    private static List<string>? ReadStringArray(TomlTable t, string key)
+    private static TomlTable? TryReadEmbeddedModel()
     {
-        if (!t.TryGetValue(key, out var v) || v is not TomlArray arr)
+        try
+        {
+            if (!BundledContent.TryReadEmbeddedText("DefaultSettings/settings.default.toml", out var embedded))
+                return null;
+            return TomlSerializer.Deserialize<TomlTable>(embedded);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static TomlTable? TryReadDiskModel(string path)
+    {
+        try
+        {
+            var text = File.ReadAllText(path);
+            return TomlSerializer.Deserialize<TomlTable>(text);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool? ReadBool(TomlTable? overlay, TomlTable? baseModel, string key)
+    {
+        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is bool b)
+            return b;
+        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is bool bb)
+            return bb;
+        return null;
+    }
+
+    private static List<string>? ReadStringArray(TomlTable? overlay, TomlTable? baseModel, string key)
+    {
+        TomlArray? arr = null;
+        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is TomlArray a)
+            arr = a;
+        else if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is TomlArray aa)
+            arr = aa;
+        if (arr is null)
             return null;
         var list = new List<string>(arr.Count);
         foreach (var it in arr)
