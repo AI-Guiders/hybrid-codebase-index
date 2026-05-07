@@ -40,3 +40,15 @@ chunk_overlap_lines = 15
 # Binary detection probe size (bytes); if the probe contains NUL, file is treated as binary.
 binary_probe_bytes = 8192
 
+# Semantic / vec (opt-in)
+semantic_enabled = false
+
+# Provider id (v0: "dummy"; later: "ollama", "openai", etc.)
+embedding_provider = "dummy"
+
+# Provider/model-specific name (optional; ignored by dummy).
+embedding_model = ""
+
+# Explicit dimension; 0 = provider default.
+embedding_dim = 0
+

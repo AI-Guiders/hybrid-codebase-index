@@ -13,6 +13,8 @@ public sealed record IndexHit(
     string Extension,
     string HitKind,
     double RankScore,
+    double? FtsScore,
+    double? VecScore,
     string? Snippet,
     int LineStart,
     int LineEnd,

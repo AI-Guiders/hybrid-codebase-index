@@ -38,6 +38,10 @@ internal static class ToolCatalog
                         solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Используется для области индекса: одна БД на (workspace_root, solution_path)." },
                         query = new { type = "string", description = "Поисковая строка (ключевые слова, AND по токенам)." },
                         top_n = new { type = "integer", description = "Максимум попаданий (по умолчанию 15)." },
+                        semantic = new { type = "boolean", description = "Опционально: включить semantic (vec) канал, если он проиндексирован и semantic_enabled=true." },
+                        alpha = new { type = "number", description = "Опционально: вес FTS канала при фьюжне (по умолчанию 0.65)." },
+                        beta = new { type = "number", description = "Опционально: вес vec канала при фьюжне (по умолчанию 0.35)." },
+                        vec_top_k = new { type = "integer", description = "Опционально: внутренний top-K по vec (по умолчанию 30)." },
                         path_prefix = new { type = "string", description = "Опционально: ограничить попадания путями, начинающимися с префикса (unix-style, например 'src/')." },
                         exclude_path_prefixes = new { type = "array", items = new { type = "string" }, description = "Опционально: исключить пути по префиксам (unix-style)." },
                         extensions = new { type = "array", items = new { type = "string" }, description = "Опционально: ограничить расширениями (например ['.md','.csproj'] или ['md','csproj'])." },
@@ -148,6 +152,22 @@ internal static class ToolCatalog
                         changed_paths = new { type = "array", items = new { type = "string" }, description = "Список путей (relative to workspace) для включения в черновик." },
                     },
                     required = new[] { "workspace_path", "title", "changed_paths" },
+                }),
+            },
+            new Tool
+            {
+                Name = "codebase_index_vec_reindex",
+                Description =
+                    "Построить/обновить vec-индекс (эмбеддинги) для текущей SQLite базы. Требует semantic_enabled=true.",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        workspace_path = new { type = "string", description = "Корень workspace." },
+                        solution_path = new { type = "string", description = "Опционально: путь к .sln/.slnx/.csproj (relative to workspace или absolute). Scope: одна БД на (workspace_root, solution_path)." },
+                    },
+                    required = new[] { "workspace_path" },
                 }),
             },
         ];

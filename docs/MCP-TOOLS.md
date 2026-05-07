@@ -40,5 +40,9 @@ Explain для одного попадания (по hit_id из search): вер
 
 Синтез документации (черновик): собрать markdown-скелет с выдержками из изменённых файлов (по индексу).
 
+### `codebase_index_vec_reindex`
+
+Построить/обновить vec-индекс (эмбеддинги) для текущей SQLite базы. Требует semantic_enabled=true.
+
 <!-- GENERATED:ToolCatalog END -->
 

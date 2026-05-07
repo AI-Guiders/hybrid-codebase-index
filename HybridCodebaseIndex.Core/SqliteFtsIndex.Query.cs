@@ -107,7 +107,7 @@ internal static partial class SqliteFtsIndex
                 var lastWriteIso = reader.IsDBNull(8)
                     ? null
                     : new DateTime(reader.GetInt64(8), DateTimeKind.Utc).ToString("O");
-                hits.Add(new IndexHit(hitId, path, ext, HitKinds.TextFts, bm, snip, lineStart, lineEnd, chunkChars, lastWriteIso));
+                hits.Add(new IndexHit(hitId, path, ext, HitKinds.TextFts, bm, FtsScore: bm, VecScore: null, snip, lineStart, lineEnd, chunkChars, lastWriteIso));
             }
 
             return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
@@ -187,7 +187,7 @@ internal static partial class SqliteFtsIndex
             ? null
             : new DateTime(r.GetInt64(7), DateTimeKind.Utc).ToString("O");
 
-        var hit = new IndexHit(id, path, ext, HitKinds.TextFts, 0, body, lineStart, lineEnd, chunkChars, lastWriteIso);
+        var hit = new IndexHit(id, path, ext, HitKinds.TextFts, 0, FtsScore: null, VecScore: null, body, lineStart, lineEnd, chunkChars, lastWriteIso);
         return new ExplainHitResponse(FormatVersion, dbPath, hit, null);
     }
 

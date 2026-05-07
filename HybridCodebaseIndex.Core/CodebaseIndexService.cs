@@ -88,6 +88,26 @@ public sealed class CodebaseIndexService
         return SqliteFtsIndex.SearchAsync(root, db, query, topN, pathPrefix, excludePathPrefixes, extensions, cancellationToken);
     }
 
+    public Task<(SearchResponse response, string? error)> SearchHybridAsync(
+        string workspaceRoot,
+        string? solutionPath,
+        string query,
+        int topN,
+        string? pathPrefix,
+        IReadOnlyList<string>? excludePathPrefixes,
+        IReadOnlyList<string>? extensions,
+        bool semantic,
+        double alpha,
+        double beta,
+        int vecTopK,
+        CancellationToken cancellationToken = default)
+    {
+        var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        var indexDir = ResolveIndexDirectoryRelative(root, solutionPath);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, indexDir);
+        return SqliteFtsIndex.SearchHybridAsync(root, db, query, topN, pathPrefix, excludePathPrefixes, extensions, semantic, alpha, beta, vecTopK, cancellationToken);
+    }
+
     public Task<IndexStatus> GetStatusAsync(string workspaceRoot, CancellationToken cancellationToken = default)
         => GetStatusAsync(workspaceRoot, solutionPath: null, cancellationToken);
 
@@ -110,6 +130,17 @@ public sealed class CodebaseIndexService
         var indexDir = ResolveIndexDirectoryRelative(root, solutionPath);
         var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, indexDir);
         return SqliteFtsIndex.DraftDocAsync(root, db, title, changedPaths, cancellationToken);
+    }
+
+    public Task<(int vectorsUpserted, string? err)> ReindexVectorsAsync(
+        string workspaceRoot,
+        string? solutionPath,
+        CancellationToken cancellationToken = default)
+    {
+        var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        var indexDir = ResolveIndexDirectoryRelative(root, solutionPath);
+        var db = SqliteFtsIndex.ResolveDatabasePathForRead(root, indexDir);
+        return SqliteFtsIndex.ReindexVectorsAsync(root, db, cancellationToken);
     }
 
     private string ResolveIndexDirectoryRelative(string workspaceRootNormalized, string? solutionPath)

@@ -38,6 +38,7 @@ internal static class ToolHandlers
             "codebase_index_watch" => HandleWatch(args),
             "codebase_index_verify" => HandleVerify(args),
             "codebase_index_draft_doc" => HandleDraftDoc(args),
+            "codebase_index_vec_reindex" => HandleVecReindex(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
     }
@@ -75,13 +76,18 @@ internal static class ToolHandlers
         var excludePrefixes = OptionalStringArray(args, "exclude_path_prefixes");
         var extensions = OptionalStringArray(args, "extensions");
 
-        var (response, err) = Service.SearchAsync(ws, sln, q, topN, pathPrefix, excludePrefixes, extensions).GetAwaiter().GetResult();
+        var semantic = OptionalBool(args, "semantic") ?? false;
+        var alpha = OptionalDouble(args, "alpha") ?? 0.65;
+        var beta = OptionalDouble(args, "beta") ?? 0.35;
+        var vecTopK = OptionalInt(args, "vec_top_k") ?? 30;
+
+        var (response, err) = Service.SearchHybridAsync(ws, sln, q, topN, pathPrefix, excludePrefixes, extensions, semantic, alpha, beta, vecTopK).GetAwaiter().GetResult();
         var dto = new SearchResultDto(
             Err: err,
             IndexFormatVersion: response.IndexFormatVersion,
             Query: response.Query,
             DatabasePath: response.DatabasePath,
-            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso)).ToList());
+            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso)).ToList());
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -99,7 +105,7 @@ internal static class ToolHandlers
             DatabasePath: resp.DatabasePath,
             Hit: resp.Hit is null
                 ? null
-                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.Extension, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd, resp.Hit.ChunkCharCount, resp.Hit.LastWriteUtcIso));
+                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.Extension, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.FtsScore, resp.Hit.VecScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd, resp.Hit.ChunkCharCount, resp.Hit.LastWriteUtcIso));
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -239,7 +245,7 @@ internal static class ToolHandlers
 
             var hits = resp.Hits
                 .Take(topN)
-                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                 .ToList();
 
             if (hits.Count > 0)
@@ -256,7 +262,7 @@ internal static class ToolHandlers
                 {
                     var segHits = segResp.Hits
                         .Take(topN)
-                        .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
+                        .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                         .ToList();
                     results.Add(new VerifyItemDto(id, Exists: true, MatchKind: "segment", Segment: seg, Err: null, Hits: segHits, Suggestions: []));
                     continue;
@@ -280,7 +286,7 @@ internal static class ToolHandlers
 
             var sug = sugResp.Hits
                 .Take(suggestions)
-                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
+                .Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso))
                 .ToList();
 
             results.Add(new VerifyItemDto(id, Exists: false, MatchKind: "strict", Segment: null, Err: null, Hits: [], Suggestions: sug));
@@ -411,6 +417,8 @@ internal static class ToolHandlers
         string Extension,
         string HitKind,
         double RankScore,
+        double? FtsScore,
+        double? VecScore,
         string? Snippet,
         int LineStart,
         int LineEnd,
@@ -505,4 +513,27 @@ internal static class ToolHandlers
         string DatabasePath,
         string Title,
         string Markdown);
+
+    private static string HandleVecReindex(IReadOnlyDictionary<string, JsonElement> args)
+    {
+        var ws = RequireString(args, "workspace_path");
+        var sln = OptionalString(args, "solution_path");
+        var (count, err) = Service.ReindexVectorsAsync(ws, sln).GetAwaiter().GetResult();
+        return JsonSerializer.Serialize(new
+        {
+            workspacePath = ws,
+            solutionPath = sln,
+            vectorsUpserted = count,
+            err,
+        }, JsonOut);
+    }
+
+    private static double? OptionalDouble(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el))
+            return null;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var d))
+            return d;
+        return null;
+    }
 }

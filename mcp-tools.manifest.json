@@ -34,6 +34,10 @@
     {
       "name": "codebase_index_draft_doc",
       "description": "Синтез документации (черновик): собрать markdown-скелет с выдержками из изменённых файлов (по индексу)."
+    },
+    {
+      "name": "codebase_index_vec_reindex",
+      "description": "Построить/обновить vec-индекс (эмбеддинги) для текущей SQLite базы. Требует semantic_enabled=true."
     }
   ]
 }

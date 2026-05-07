@@ -14,7 +14,11 @@ public sealed record IndexSettings(
     long MaxIndexedFileBytes,
     int ChunkLines,
     int ChunkOverlapLines,
-    int BinaryProbeBytes)
+    int BinaryProbeBytes,
+    bool SemanticEnabled,
+    string? EmbeddingProvider,
+    string? EmbeddingModel,
+    int EmbeddingDim)
 {
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
@@ -27,7 +31,11 @@ public sealed record IndexSettings(
         MaxIndexedFileBytes: 0,
         ChunkLines: 0,
         ChunkOverlapLines: 0,
-        BinaryProbeBytes: 0);
+        BinaryProbeBytes: 0,
+        SemanticEnabled: false,
+        EmbeddingProvider: null,
+        EmbeddingModel: null,
+        EmbeddingDim: 0);
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
@@ -78,7 +86,27 @@ public sealed record IndexSettings(
         var overlapLines = ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
         var probeBytes = ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
 
-        settings = new IndexSettings(includeCs, extraRoots, excludeRoots, includeExt, excludeExt, excludeSegments, ignoreFiles, maxBytes, chunkLines, overlapLines, probeBytes);
+        var semanticEnabled = ReadBool(diskModel, embeddedModel, "semantic_enabled") ?? Default.SemanticEnabled;
+        var embeddingProvider = ReadString(diskModel, embeddedModel, "embedding_provider") ?? Default.EmbeddingProvider;
+        var embeddingModel = ReadString(diskModel, embeddedModel, "embedding_model") ?? Default.EmbeddingModel;
+        var embeddingDim = ReadInt(diskModel, embeddedModel, "embedding_dim") ?? Default.EmbeddingDim;
+
+        settings = new IndexSettings(
+            includeCs,
+            extraRoots,
+            excludeRoots,
+            includeExt,
+            excludeExt,
+            excludeSegments,
+            ignoreFiles,
+            maxBytes,
+            chunkLines,
+            overlapLines,
+            probeBytes,
+            semanticEnabled,
+            embeddingProvider,
+            embeddingModel,
+            embeddingDim);
         return true;
     }
 
@@ -198,6 +226,15 @@ public sealed record IndexSettings(
                 list.Add(s.Trim());
         }
         return list;
+    }
+
+    private static string? ReadString(TomlTable? overlay, TomlTable? baseModel, string key)
+    {
+        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is string s)
+            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is string ss)
+            return string.IsNullOrWhiteSpace(ss) ? null : ss.Trim();
+        return null;
     }
 
     private static List<string>? NormalizeExtensions(List<string>? raw)
