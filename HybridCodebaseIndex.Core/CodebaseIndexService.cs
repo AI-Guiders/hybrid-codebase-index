@@ -22,6 +22,16 @@ public sealed class CodebaseIndexService
         return SqliteFtsIndex.FullRebuildAsync(root, db, cancellationToken);
     }
 
+    public Task<ExplainHitResponse> ExplainHitAsync(
+        string workspaceRoot,
+        long hitId,
+        CancellationToken cancellationToken = default)
+    {
+        var root = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        var db = SqliteFtsIndex.ResolveDatabasePath(root, _indexDirectoryRelative);
+        return SqliteFtsIndex.ExplainHitAsync(root, db, hitId, cancellationToken);
+    }
+
     public Task<(SearchResponse response, string? error)> SearchAsync(
         string workspaceRoot,
         string query,

@@ -35,6 +35,8 @@ internal static class SqliteFtsIndex
         var filesIndexed = 0;
         var skippedLarge = 0;
         var skippedBinary = 0;
+        var skippedExcluded = 0;
+        var skippedSample = new List<SkippedPath>(capacity: 64);
 
         {
             using var conn = new SqliteConnection($"Data Source={tmpPath};Mode=ReadWriteCreate");
@@ -50,9 +52,40 @@ internal static class SqliteFtsIndex
                 VALUES ($path, $ext, $ls, $le, $body);
                 """;
 
-            foreach (var absolute in WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot))
+            var candidates = WorkspaceScanner.EnumerateIndexableFiles(workspaceRoot).ToList();
+
+            // Optional: respect .gitignore via `git check-ignore` if git is available.
+            var relCandidates = new List<string>(capacity: candidates.Count);
+            foreach (var absolute in candidates)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (WorkspaceScanner.ShouldExcludePath(absolute))
+                {
+                    skippedExcluded++;
+                    AddSample(skippedSample, WorkspaceScanner.RelativePath(workspaceRoot, absolute), "denylist");
+                    continue;
+                }
+
+                relCandidates.Add(WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal));
+            }
+
+            var ignoredByGit = GitCheckIgnore.GetIgnoredRelativePathsOrEmpty(workspaceRoot, relCandidates);
+
+            foreach (var absolute in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (WorkspaceScanner.ShouldExcludePath(absolute))
+                    continue;
+
+                var rel = WorkspaceScanner.RelativePath(workspaceRoot, absolute).Replace("\\", "/", StringComparison.Ordinal);
+                if (ignoredByGit.Contains(rel))
+                {
+                    skippedExcluded++;
+                    AddSample(skippedSample, rel, "gitignore");
+                    continue;
+                }
 
                 FileInfo info;
                 try
@@ -61,11 +94,14 @@ internal static class SqliteFtsIndex
                     if (info.Length > WorkspaceScanner.MaxIndexedFileBytes)
                     {
                         skippedLarge++;
+                        AddSample(skippedSample, rel, "too_large");
                         continue;
                     }
                 }
                 catch
                 {
+                    skippedExcluded++;
+                    AddSample(skippedSample, rel, "io_error");
                     continue;
                 }
 
@@ -76,6 +112,7 @@ internal static class SqliteFtsIndex
                 if (WorkspaceScanner.LooksBinary(probe.AsSpan(0, read)))
                 {
                     skippedBinary++;
+                    AddSample(skippedSample, rel, "binary");
                     continue;
                 }
 
@@ -83,9 +120,7 @@ internal static class SqliteFtsIndex
                 using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                 var text = reader.ReadToEnd();
 
-                var relative = WorkspaceScanner.RelativePath(workspaceRoot, absolute);
                 var ext = Path.GetExtension(absolute);
-                var rel = relative.Replace("\\", "/", StringComparison.Ordinal);
 
                 var chunks = WorkspaceScanner.ChunkByLines(text);
                 var anyChunk = false;
@@ -119,7 +154,16 @@ internal static class SqliteFtsIndex
             filesIndexed,
             skippedLarge,
             skippedBinary,
+            skippedExcluded,
+            skippedSample,
             sw.Elapsed);
+    }
+
+    private static void AddSample(List<SkippedPath> sample, string relPath, string reason)
+    {
+        if (sample.Count >= 50)
+            return;
+        sample.Add(new SkippedPath(relPath, reason));
     }
 
     private static void TryReplaceDatabase(string tmpPath, string dbPath)
@@ -235,7 +279,7 @@ internal static class SqliteFtsIndex
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-             SELECT path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)
+             SELECT rowid, path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)
              FROM chunks
              WHERE chunks MATCH $q
              ORDER BY bm25(chunks) DESC
@@ -248,15 +292,56 @@ internal static class SqliteFtsIndex
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            var path = reader.GetString(0);
-            var lineStart = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
-            var lineEnd = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-            var bm = reader.GetDouble(3);
-            var snip = reader.IsDBNull(4) ? null : reader.GetString(4);
-            hits.Add(new IndexHit(path, HitKinds.TextFts, bm, snip, lineStart, lineEnd));
+            var hitId = reader.GetInt64(0);
+            var path = reader.GetString(1);
+            var lineStart = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+            var lineEnd = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+            var bm = reader.GetDouble(4);
+            var snip = reader.IsDBNull(5) ? null : reader.GetString(5);
+            hits.Add(new IndexHit(hitId, path, HitKinds.TextFts, bm, snip, lineStart, lineEnd));
         }
 
         return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
+    }
+
+    internal static Task<ExplainHitResponse> ExplainHitAsync(
+        string workspaceRoot,
+        string dbPath,
+        long hitId,
+        CancellationToken cancellationToken)
+        => Task.Run(() => ExplainHit(workspaceRoot, dbPath, hitId), cancellationToken);
+
+    private static ExplainHitResponse ExplainHit(string workspaceRoot, string dbPath, long hitId)
+    {
+        workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
+        if (!File.Exists(dbPath))
+            return new ExplainHitResponse(FormatVersion, dbPath, null, "Index database not found; run codebase_index_reindex.");
+
+        using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT rowid, path, line_start, line_end, extension, substr(body, 1, 1200)
+            FROM chunks
+            WHERE rowid = $id
+            LIMIT 1;
+            """;
+        cmd.Parameters.AddWithValue("$id", hitId);
+
+        using var r = cmd.ExecuteReader();
+        if (!r.Read())
+            return new ExplainHitResponse(FormatVersion, dbPath, null, $"Hit not found: {hitId}");
+
+        var id = r.GetInt64(0);
+        var path = r.GetString(1);
+        var lineStart = r.IsDBNull(2) ? 0 : r.GetInt32(2);
+        var lineEnd = r.IsDBNull(3) ? 0 : r.GetInt32(3);
+        var ext = r.IsDBNull(4) ? "" : r.GetString(4);
+        var body = r.IsDBNull(5) ? null : r.GetString(5);
+
+        var hit = new IndexHit(id, path, HitKinds.TextFts, 0, body, lineStart, lineEnd);
+        return new ExplainHitResponse(FormatVersion, dbPath, hit, null);
     }
 
     /// <summary>Безопасное FTS5 MATCH: токены через AND, суффикс * (префиксное совпадение). Пустой запрос → null.</summary>

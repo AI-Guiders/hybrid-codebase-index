@@ -25,25 +25,8 @@ internal static class WorkspaceScanner
         {
             foreach (var file in Directory.EnumerateFiles(normalized, $"*{ext}", SearchOption.AllDirectories))
             {
-                if (ShouldExcludePath(file))
-                    continue;
-                var len = TryGetFileLength(file);
-                if (len is null)
-                    continue;
                 yield return file;
             }
-        }
-    }
-
-    private static long? TryGetFileLength(string path)
-    {
-        try
-        {
-            return new FileInfo(path).Length;
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -56,6 +39,10 @@ internal static class WorkspaceScanner
                      $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
                      $"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}",
                      $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}",
+                     $"{Path.DirectorySeparatorChar}.vs{Path.DirectorySeparatorChar}",
+                     $"{Path.DirectorySeparatorChar}.idea{Path.DirectorySeparatorChar}",
+                     $"{Path.DirectorySeparatorChar}.cache{Path.DirectorySeparatorChar}",
+                     $"{Path.DirectorySeparatorChar}.cascade-ide{Path.DirectorySeparatorChar}",
                  })
         {
             if (fullPath.Contains(token, StringComparison.OrdinalIgnoreCase))

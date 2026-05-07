@@ -33,6 +33,21 @@ internal static class ToolCatalog
             },
             new Tool
             {
+                Name = "codebase_index_explain",
+                Description = "Explain для одного попадания (по hit_id из search): вернуть контекст чанка и метаданные.",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        workspace_path = new { type = "string", description = "Корень workspace." },
+                        hit_id = new { type = "integer", description = "Идентификатор попадания (hitId из search)." },
+                    },
+                    required = new[] { "workspace_path", "hit_id" },
+                }),
+            },
+            new Tool
+            {
                 Name = "codebase_index_status",
                 Description = "Статус локального индекса: путь к SQLite, число документов, версия формата.",
                 InputSchema = Schema(new

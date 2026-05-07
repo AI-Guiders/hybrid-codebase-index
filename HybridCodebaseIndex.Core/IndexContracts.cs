@@ -8,6 +8,7 @@ public static class HitKinds
 }
 
 public sealed record IndexHit(
+    long HitId,
     string Path,
     string HitKind,
     double RankScore,
@@ -20,6 +21,12 @@ public sealed record SearchResponse(
     string Query,
     string DatabasePath,
     IReadOnlyList<IndexHit> Hits);
+
+public sealed record ExplainHitResponse(
+    int IndexFormatVersion,
+    string DatabasePath,
+    IndexHit? Hit,
+    string? Err);
 
 public sealed record IndexStatus(
     int IndexFormatVersion,
@@ -35,4 +42,10 @@ public sealed record ReindexSummary(
     int FilesIndexed,
     int FilesSkippedTooLarge,
     int FilesSkippedBinary,
+    int FilesSkippedExcluded,
+    IReadOnlyList<SkippedPath> SkippedSample,
     TimeSpan Duration);
+
+public sealed record SkippedPath(
+    string Path,
+    string Reason);

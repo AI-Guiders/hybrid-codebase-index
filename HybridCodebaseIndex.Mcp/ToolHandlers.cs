@@ -22,6 +22,7 @@ internal static class ToolHandlers
         return name switch
         {
             "codebase_index_search" => HandleSearch(args),
+            "codebase_index_explain" => HandleExplain(args),
             "codebase_index_status" => HandleStatus(args),
             "codebase_index_reindex" => HandleReindex(args),
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
@@ -44,7 +45,24 @@ internal static class ToolHandlers
             IndexFormatVersion: response.IndexFormatVersion,
             Query: response.Query,
             DatabasePath: response.DatabasePath,
-            Hits: response.Hits.Select(static h => new HitDto(h.Path, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd)).ToList());
+            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd)).ToList());
+
+        return JsonSerializer.Serialize(dto, JsonOut);
+    }
+
+    private static string HandleExplain(IReadOnlyDictionary<string, JsonElement> args)
+    {
+        var ws = RequireString(args, "workspace_path");
+        var hitId = RequireLong(args, "hit_id");
+
+        var resp = Service.ExplainHitAsync(ws, hitId).GetAwaiter().GetResult();
+        var dto = new ExplainResultDto(
+            Err: resp.Err,
+            IndexFormatVersion: resp.IndexFormatVersion,
+            DatabasePath: resp.DatabasePath,
+            Hit: resp.Hit is null
+                ? null
+                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd));
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -74,6 +92,8 @@ internal static class ToolHandlers
             FilesIndexed: summary.FilesIndexed,
             FilesSkippedTooLarge: summary.FilesSkippedTooLarge,
             FilesSkippedBinary: summary.FilesSkippedBinary,
+            FilesSkippedExcluded: summary.FilesSkippedExcluded,
+            SkippedSample: summary.SkippedSample.Select(static s => new SkippedDto(s.Path, s.Reason)).ToList(),
             DurationMs: (long)summary.Duration.TotalMilliseconds);
 
         return JsonSerializer.Serialize(dto, JsonOut);
@@ -98,6 +118,17 @@ internal static class ToolHandlers
         return el.TryGetInt32(out var i) ? i : null;
     }
 
+    private static long RequireLong(IReadOnlyDictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var el))
+            throw new ArgumentException($"Missing or invalid '{key}' (integer required).");
+
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var v))
+            return v;
+
+        throw new ArgumentException($"Missing or invalid '{key}' (integer required).");
+    }
+
     private sealed record SearchResultDto(
         string? Err,
         int IndexFormatVersion,
@@ -106,12 +137,19 @@ internal static class ToolHandlers
         List<HitDto> Hits);
 
     private sealed record HitDto(
+        long HitId,
         string Path,
         string HitKind,
         double RankScore,
         string? Snippet,
         int LineStart,
         int LineEnd);
+
+    private sealed record ExplainResultDto(
+        string? Err,
+        int IndexFormatVersion,
+        string DatabasePath,
+        HitDto? Hit);
 
     private sealed record StatusResultDto(
         int IndexFormatVersion,
@@ -127,5 +165,11 @@ internal static class ToolHandlers
         int FilesIndexed,
         int FilesSkippedTooLarge,
         int FilesSkippedBinary,
+        int FilesSkippedExcluded,
+        List<SkippedDto> SkippedSample,
         long DurationMs);
+
+    private sealed record SkippedDto(
+        string Path,
+        string Reason);
 }
