@@ -17,6 +17,13 @@ internal static class ToolHandlers
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    private static readonly JsonSerializerOptions JsonOutWithNulls = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+    };
+
     internal static string Handle(string name, IReadOnlyDictionary<string, JsonElement> args)
     {
         args ??= FrozenDictionary<string, JsonElement>.Empty;
@@ -101,7 +108,8 @@ internal static class ToolHandlers
             LastReindexError: st.LastReindexError,
             LastReindexErrorAtIso: st.LastReindexErrorAtIso);
 
-        return JsonSerializer.Serialize(dto, JsonOut);
+        // Keep the contract stable: include nullable fields explicitly.
+        return JsonSerializer.Serialize(dto, JsonOutWithNulls);
     }
 
     private static string HandleReindex(IReadOnlyDictionary<string, JsonElement> args)
