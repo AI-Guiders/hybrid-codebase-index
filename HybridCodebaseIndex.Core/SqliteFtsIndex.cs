@@ -13,7 +13,7 @@ internal static class SqliteFtsIndex
     {
         var dir = Path.Combine(workspaceRoot, indexDirectoryRelative.TrimStart(Path.DirectorySeparatorChar, '/'));
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, $"codebase-index-v{FormatVersion}.sqlite");
+        return ResolveActiveDatabasePath(dir);
     }
 
     internal static Task<ReindexSummary> FullRebuildAsync(
@@ -27,10 +27,15 @@ internal static class SqliteFtsIndex
         var sw = System.Diagnostics.Stopwatch.StartNew();
         workspaceRoot = Path.GetFullPath(workspaceRoot.TrimEnd(Path.DirectorySeparatorChar));
 
-        // Build into a fresh file if an existing DB is present; do not touch it (it can be in use by readers).
-        // If there is no DB yet, build directly into the final path to avoid extra file moves (more robust on Windows).
-        var hasExisting = File.Exists(dbPath);
-        var tmpPath = hasExisting ? dbPath + ".tmp-" + Guid.NewGuid().ToString("n") : dbPath;
+        var indexDir = Path.GetDirectoryName(dbPath);
+        if (string.IsNullOrWhiteSpace(indexDir))
+            throw new InvalidOperationException($"Invalid dbPath: '{dbPath}'");
+        Directory.CreateDirectory(indexDir);
+
+        // Lock-free rebuild: build into a brand-new DB file; then atomically flip a small "active" pointer.
+        // Readers can keep the old DB open as long as they want; reindex never replaces the file they hold.
+        var newDbFileName = $"codebase-index-v{FormatVersion}.{Guid.NewGuid():n}.sqlite";
+        var newDbPath = Path.Combine(indexDir, newDbFileName);
 
         var filesIndexed = 0;
         var skippedLarge = 0;
@@ -39,7 +44,7 @@ internal static class SqliteFtsIndex
         var skippedSample = new List<SkippedPath>(capacity: 64);
 
         {
-            using var conn = new SqliteConnection($"Data Source={tmpPath};Mode=ReadWriteCreate");
+            using var conn = new SqliteConnection($"Data Source={newDbPath};Mode=ReadWriteCreate");
             conn.Open();
 
             InitEmptyIndex(conn, workspaceRoot);
@@ -141,12 +146,11 @@ internal static class SqliteFtsIndex
 
         sw.Stop();
 
-        if (hasExisting)
-            TryReplaceDatabase(tmpPath, dbPath);
+        TryWriteActivePointer(indexDir, newDbFileName);
 
         return new ReindexSummary(
             FormatVersion,
-            dbPath,
+            newDbPath,
             filesIndexed,
             skippedLarge,
             skippedBinary,
@@ -162,35 +166,66 @@ internal static class SqliteFtsIndex
         sample.Add(new SkippedPath(relPath, reason));
     }
 
-    private static void TryReplaceDatabase(string tmpPath, string dbPath)
+    private static string ResolveActiveDatabasePath(string indexDir)
     {
-        // Best-effort: try a few times in case the old DB is momentarily locked.
-        var backup = dbPath + ".bak";
-        for (var attempt = 0; attempt < 5; attempt++)
+        var pointer = GetActivePointerPath(indexDir);
+        if (File.Exists(pointer))
         {
             try
             {
-                if (File.Exists(dbPath))
+                var name = File.ReadAllText(pointer).Trim();
+                if (name.Length != 0)
                 {
-                    File.Replace(tmpPath, dbPath, backup, ignoreMetadataErrors: true);
-                    if (File.Exists(backup))
-                        File.Delete(backup);
+                    var candidate = Path.Combine(indexDir, name);
+                    if (File.Exists(candidate))
+                        return candidate;
                 }
-                else
-                {
-                    File.Move(tmpPath, dbPath);
-                }
-
-                return;
             }
-            catch (IOException) when (attempt < 4)
+            catch
             {
-                Thread.Sleep(120 * (attempt + 1));
+                // ignore; fallback below
             }
         }
 
-        // If replace failed, keep tmp around for inspection.
-        throw new IOException($"Could not replace index DB (in use?): '{dbPath}'. Temporary DB: '{tmpPath}'.");
+        // Back-compat fallback (pre lock-free pointer): fixed filename.
+        return Path.Combine(indexDir, $"codebase-index-v{FormatVersion}.sqlite");
+    }
+
+    private static string GetActivePointerPath(string indexDir)
+        => Path.Combine(indexDir, $"active-v{FormatVersion}.txt");
+
+    private static void TryWriteActivePointer(string indexDir, string activeDbFileName)
+    {
+        var pointer = GetActivePointerPath(indexDir);
+        var tmp = pointer + ".tmp-" + Guid.NewGuid().ToString("n");
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                File.WriteAllText(tmp, activeDbFileName, Encoding.UTF8);
+                File.Move(tmp, pointer, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                Thread.Sleep(80 * (attempt + 1));
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tmp))
+                        File.Delete(tmp);
+                }
+                catch
+                {
+                    // best-effort
+                }
+            }
+        }
+
+        throw new IOException($"Could not write active pointer: '{pointer}'.");
     }
 
     private static void InitEmptyIndex(SqliteConnection conn, string workspaceRoot)
