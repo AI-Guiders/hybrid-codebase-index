@@ -1,6 +1,6 @@
 namespace HybridCodebaseIndex.Core;
 
-/// <summary>Стабильные значения типа попадания (ADR 0105 слой B). Векторный канал появится при включении semantic.</summary>
+/// <summary>Стабильные значения типа попадания (слой B, ADR 0105 CascadeIDE). Векторный канал при включении semantic.</summary>
 public static class HitKinds
 {
     public const string TextFts = "text_fts";

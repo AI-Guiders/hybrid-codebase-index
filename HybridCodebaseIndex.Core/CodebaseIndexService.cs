@@ -1,6 +1,6 @@
 namespace HybridCodebaseIndex.Core;
 
-/// <summary>Сервис гибридного индекса (ADR 0105 слой B, v0: только FTS5 по тексту файлов).</summary>
+/// <summary>Сервис гибридного индекса (слой B по ADR 0105 CascadeIDE; v0: FTS5 по тексту файлов).</summary>
 public sealed class CodebaseIndexService
 {
     private readonly string _indexDirectoryRelative;

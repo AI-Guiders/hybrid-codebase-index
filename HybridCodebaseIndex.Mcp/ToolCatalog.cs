@@ -28,7 +28,7 @@ internal static class ToolCatalog
             {
                 Name = "codebase_index_search",
                 Description =
-                    "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5, см. docs/ADR-0105-hybrid-codebase-index-core-and-mcp.md). hit_kind=text_fts. До reindex база может отсутствовать.",
+                    "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать.",
                 InputSchema = Schema(new
                 {
                     type = "object",

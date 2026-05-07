@@ -1,6 +1,6 @@
 # Зачем гибридный индекс и почему он устроен именно так
 
-Это текст **для человека**, который открывает репозиторий MCP: зачем слой между агентом и кодовой базой и почему выбраны конкретные компромиссы. Формальное зафиксированное решение и глоссарий — в [ADR 0105](ADR-0105-hybrid-codebase-index-core-and-mcp.md); интеграция с IDE — отдельно в репозитории CascadeIDE ([ADR 0106](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0106-hybrid-codebase-index-cascadeide-integration-and-semantic-map.md)).
+Это текст **для человека**, который открывает репозиторий MCP: зачем слой между агентом и кодовой базой и почему выбраны конкретные компромиссы. Формальное архитектурное решение с нумерацией ADR относится к **CascadeIDE** — см. **[ADR 0105](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0105-hybrid-codebase-index-for-csharp-web.md)** (*Accepted · Implemented*). Интеграция продукта в IDE — **[ADR 0106](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0106-hybrid-codebase-index-cascadeide-integration-and-semantic-map.md)**.
 
 ---
 
@@ -61,6 +61,6 @@ IDE может позже использовать **то же ядро in-proce
 
 | Документ | Содержание |
 | --- | --- |
-| [ADR-0105](ADR-0105-hybrid-codebase-index-core-and-mcp.md) | Решение, слои, план, эскизы чанкинга и фьюжна |
+| [ADR 0105 в CascadeIDE](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0105-hybrid-codebase-index-for-csharp-web.md) | Решение, слои, глоссарий, план внедрения, эскизы чанкинга и фьюжна |
 | [MCP-TOOLS](MCP-TOOLS.md) | Описание инструментов MCP (генерируется из кода) |
 | [README](../README.md) | Установка, `settings.toml`, быстрый старт |
