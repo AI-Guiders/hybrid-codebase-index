@@ -764,7 +764,7 @@ internal static class SqliteFtsIndex
 
         using var cmd = conn.CreateCommand();
         var sql = new StringBuilder();
-        sql.AppendLine("SELECT rowid, path, line_start, line_end, bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)");
+        sql.AppendLine("SELECT rowid, path, extension, line_start, line_end, length(body), bm25(chunks), snippet(chunks, 4, '[', ']', ' … ', 24)");
         sql.AppendLine("FROM chunks");
         sql.AppendLine("WHERE chunks MATCH $q");
 
@@ -818,11 +818,13 @@ internal static class SqliteFtsIndex
         {
             var hitId = reader.GetInt64(0);
             var path = reader.GetString(1);
-            var lineStart = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-            var lineEnd = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
-            var bm = reader.GetDouble(4);
-            var snip = reader.IsDBNull(5) ? null : reader.GetString(5);
-            hits.Add(new IndexHit(hitId, path, HitKinds.TextFts, bm, snip, lineStart, lineEnd));
+            var ext = reader.IsDBNull(2) ? "" : reader.GetString(2);
+            var lineStart = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+            var lineEnd = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+            var chunkChars = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+            var bm = reader.GetDouble(6);
+            var snip = reader.IsDBNull(7) ? null : reader.GetString(7);
+            hits.Add(new IndexHit(hitId, path, ext, HitKinds.TextFts, bm, snip, lineStart, lineEnd, chunkChars));
         }
 
         return (new SearchResponse(FormatVersion, userQuery, dbPath, hits), null);
@@ -868,7 +870,7 @@ internal static class SqliteFtsIndex
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT rowid, path, line_start, line_end, extension, substr(body, 1, 1200)
+            SELECT rowid, path, extension, line_start, line_end, length(body), substr(body, 1, 1200)
             FROM chunks
             WHERE rowid = $id
             LIMIT 1;
@@ -881,12 +883,13 @@ internal static class SqliteFtsIndex
 
         var id = r.GetInt64(0);
         var path = r.GetString(1);
-        var lineStart = r.IsDBNull(2) ? 0 : r.GetInt32(2);
-        var lineEnd = r.IsDBNull(3) ? 0 : r.GetInt32(3);
-        var ext = r.IsDBNull(4) ? "" : r.GetString(4);
-        var body = r.IsDBNull(5) ? null : r.GetString(5);
+        var ext = r.IsDBNull(2) ? "" : r.GetString(2);
+        var lineStart = r.IsDBNull(3) ? 0 : r.GetInt32(3);
+        var lineEnd = r.IsDBNull(4) ? 0 : r.GetInt32(4);
+        var chunkChars = r.IsDBNull(5) ? 0 : r.GetInt32(5);
+        var body = r.IsDBNull(6) ? null : r.GetString(6);
 
-        var hit = new IndexHit(id, path, HitKinds.TextFts, 0, body, lineStart, lineEnd);
+        var hit = new IndexHit(id, path, ext, HitKinds.TextFts, 0, body, lineStart, lineEnd, chunkChars);
         return new ExplainHitResponse(FormatVersion, dbPath, hit, null);
     }
 

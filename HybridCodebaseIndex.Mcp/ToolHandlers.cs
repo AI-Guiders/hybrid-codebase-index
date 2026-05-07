@@ -76,7 +76,7 @@ internal static class ToolHandlers
             IndexFormatVersion: response.IndexFormatVersion,
             Query: response.Query,
             DatabasePath: response.DatabasePath,
-            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd)).ToList());
+            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount)).ToList());
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -93,7 +93,7 @@ internal static class ToolHandlers
             DatabasePath: resp.DatabasePath,
             Hit: resp.Hit is null
                 ? null
-                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd));
+                : new HitDto(resp.Hit.HitId, resp.Hit.Path, resp.Hit.Extension, resp.Hit.HitKind, resp.Hit.RankScore, resp.Hit.Snippet, resp.Hit.LineStart, resp.Hit.LineEnd, resp.Hit.ChunkCharCount));
 
         return JsonSerializer.Serialize(dto, JsonOut);
     }
@@ -217,11 +217,13 @@ internal static class ToolHandlers
     private sealed record HitDto(
         long HitId,
         string Path,
+        string Extension,
         string HitKind,
         double RankScore,
         string? Snippet,
         int LineStart,
-        int LineEnd);
+        int LineEnd,
+        int ChunkCharCount);
 
     private sealed record ExplainResultDto(
         string? Err,

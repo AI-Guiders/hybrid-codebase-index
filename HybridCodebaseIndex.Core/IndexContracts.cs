@@ -10,11 +10,13 @@ public static class HitKinds
 public sealed record IndexHit(
     long HitId,
     string Path,
+    string Extension,
     string HitKind,
     double RankScore,
     string? Snippet,
     int LineStart,
-    int LineEnd);
+    int LineEnd,
+    int ChunkCharCount);
 
 public sealed record SearchResponse(
     int IndexFormatVersion,
