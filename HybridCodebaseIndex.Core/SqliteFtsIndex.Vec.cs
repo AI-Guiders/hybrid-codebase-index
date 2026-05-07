@@ -46,7 +46,7 @@ internal static partial class SqliteFtsIndex
         if (!settings.SemanticEnabled)
             return (0, "semantic_enabled=false in settings; enable it to build vectors.");
 
-        var provider = EmbeddingProviderFactory.Create(settings);
+        var provider = EmbeddingProviderFactory.Create(settings, Path.GetDirectoryName(dbPath));
         var dim = provider.Dimension;
 
         using var select = conn.CreateCommand();

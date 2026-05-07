@@ -57,7 +57,7 @@ internal static partial class SqliteFtsIndex
         if (!settings.SemanticEnabled)
             return (ftsResp, null);
 
-        var provider = EmbeddingProviderFactory.Create(settings);
+        var provider = EmbeddingProviderFactory.Create(settings, Path.GetDirectoryName(dbPath));
         var qv = provider.EmbedAsync(userQuery, cancellationToken).GetAwaiter().GetResult();
         var qn = Norm(qv);
         if (qn <= 1e-12)

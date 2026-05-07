@@ -52,3 +52,12 @@ embedding_model = ""
 # Explicit dimension; 0 = provider default.
 embedding_dim = 0
 
+# For ONNX provider: path to the ONNX model file (relative to index dir or absolute).
+embedding_model_path = ""
+
+# For token-based models: sequence length (0 = provider default, typically 128..256).
+embedding_sequence_length = 0
+
+# Prefer GPU if available (ONNX Runtime CUDA EP).
+embedding_prefer_gpu = true
+

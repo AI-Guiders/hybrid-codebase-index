@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.12" />
     <PackageReference Include="Ignore" Version="0.2.1" />
     <PackageReference Include="Tomlyn" Version="2.3.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.22.0" />
+    <PackageReference Include="BERTTokenizers" Version="1.0.5" />
   </ItemGroup>
 
   <ItemGroup>

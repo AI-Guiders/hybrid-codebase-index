@@ -18,7 +18,10 @@ public sealed record IndexSettings(
     bool SemanticEnabled,
     string? EmbeddingProvider,
     string? EmbeddingModel,
-    int EmbeddingDim)
+    int EmbeddingDim,
+    string? EmbeddingModelPath,
+    int EmbeddingSequenceLength,
+    bool EmbeddingPreferGpu)
 {
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
@@ -35,7 +38,10 @@ public sealed record IndexSettings(
         SemanticEnabled: false,
         EmbeddingProvider: null,
         EmbeddingModel: null,
-        EmbeddingDim: 0);
+        EmbeddingDim: 0,
+        EmbeddingModelPath: null,
+        EmbeddingSequenceLength: 0,
+        EmbeddingPreferGpu: true);
 
     public static IndexSettings TryLoadFromIndexDirectory(string? indexDirectory)
     {
@@ -90,6 +96,9 @@ public sealed record IndexSettings(
         var embeddingProvider = ReadString(diskModel, embeddedModel, "embedding_provider") ?? Default.EmbeddingProvider;
         var embeddingModel = ReadString(diskModel, embeddedModel, "embedding_model") ?? Default.EmbeddingModel;
         var embeddingDim = ReadInt(diskModel, embeddedModel, "embedding_dim") ?? Default.EmbeddingDim;
+        var embeddingModelPath = ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
+        var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
+        var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
 
         settings = new IndexSettings(
             includeCs,
@@ -106,7 +115,10 @@ public sealed record IndexSettings(
             semanticEnabled,
             embeddingProvider,
             embeddingModel,
-            embeddingDim);
+            embeddingDim,
+            embeddingModelPath,
+            embeddingSeqLen,
+            embeddingPreferGpu);
         return true;
     }
 
