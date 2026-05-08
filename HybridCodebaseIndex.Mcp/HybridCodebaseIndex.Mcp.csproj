@@ -42,4 +42,14 @@
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\win-x64\vec0.dll')">
     <None Include="native\win-x64\vec0.dll" CopyToOutputDirectory="PreserveNewest" Link="vec0.dll" />
   </ItemGroup>
+
+  <!-- sqlite-vec loadable extension (Linux x64). -->
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\linux-x64\vec0.so')">
+    <None Include="native\linux-x64\vec0.so" CopyToOutputDirectory="PreserveNewest" Link="vec0.so" />
+  </ItemGroup>
+
+  <!-- sqlite-vec loadable extension (macOS x64). -->
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\native\osx-x64\vec0.dylib')">
+    <None Include="native\osx-x64\vec0.dylib" CopyToOutputDirectory="PreserveNewest" Link="vec0.dylib" />
+  </ItemGroup>
 </Project>
