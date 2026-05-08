@@ -28,6 +28,11 @@ Run from repo root:
 This produces a self-contained exe and mirrors it to:
 - `D:\hybrid-codebase-index\HybridCodebaseIndex.Mcp.exe`
 
+### Note: local publish vs releases
+
+- `.\publish-and-deploy.ps1` is for **local Cursor MCP** workflow: publish + mirror to a fixed target path (easy to point `mcp.json` at), and avoids “file locked” issues.
+- If you add release automation (zip + upload), keep it separate from local publish (typically under `scripts/`).
+
 Then add to Cursor MCP config (`mcp.json`):
 
 ```json

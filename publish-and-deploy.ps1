@@ -14,55 +14,23 @@ if (-not (Test-Path -LiteralPath $csproj)) {
     exit 1
 }
 
-$outDir = Join-Path $here "publish"
-
 Push-Location $here
 try {
     # Keep docs/manifests in sync with ToolCatalog.
     & dotnet run --project (Join-Path $here "tools\\ExportMcpManifest\\ExportMcpManifest.csproj") -- --write | Out-Null
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    $publishArgs = @(
-        "publish", $csproj,
-        "-c", "Release",
-        "-r", "win-x64",
-        "-o", $outDir,
-        "-v", "minimal"
-    )
+    $exe = Join-Path $Target "HybridCodebaseIndex.Mcp.exe"
+    $exeJson = $exe.Replace('\', '\\')
 
-    & dotnet @publishArgs
+    # Prefer local tool (repo-pinned), but global install works too.
+    if (Test-Path -LiteralPath (Join-Path $here ".config\\dotnet-tools.json")) {
+        & dotnet aid-publish -Project $csproj -Target $Target -Runtime "win-x64" -Configuration "Release" -SelfContained -KillRunning
+    } else {
+        & aid-publish -Project $csproj -Target $Target -Runtime "win-x64" -Configuration "Release" -SelfContained -KillRunning
+    }
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    if (-not (Test-Path -LiteralPath $Target)) {
-        New-Item -ItemType Directory -Path $Target -Force | Out-Null
-    }
-
-    # If Cursor is currently running the MCP from $Target, files can be locked (clrjit.dll, etc.).
-    # Best-effort: stop the running process before mirroring.
-    try {
-        Get-Process -Name "HybridCodebaseIndex.Mcp" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 300
-    } catch {
-        # ignore
-    }
-
-    robocopy $outDir $Target /E /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS | Out-Null
-    $robocode = $LASTEXITCODE
-    if ($robocode -ge 8) {
-        Write-Error "robocopy failed with exit code $robocode"
-        exit $robocode
-    }
-
-    $exe = Join-Path $Target "HybridCodebaseIndex.Mcp.exe"
-    if (-not (Test-Path -LiteralPath $exe)) {
-        Write-Error "Expected exe not found: $exe"
-        exit 1
-    }
-
-    $ts = (Get-Item -LiteralPath $exe).LastWriteTimeUtc.ToString("o")
-    $exeJson = $exe.Replace('\', '\\')
-    Write-Host ""
-    Write-Host "OK: $exe  (UTC $ts)"
     Write-Host ""
     Write-Host "Cursor MCP: paste into mcp.json ->"
     Write-Host @"

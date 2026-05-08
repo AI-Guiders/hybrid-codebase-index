@@ -5,3 +5,4 @@
 .cascade-ide/
 # Publish output (local)
 publish/
+HybridCodebaseIndex.Mcp/publish-release/
