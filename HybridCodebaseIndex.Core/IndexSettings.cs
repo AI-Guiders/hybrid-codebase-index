@@ -1,5 +1,5 @@
+using System.Text.Json;
 using Tomlyn;
-using Tomlyn.Model;
 
 namespace HybridCodebaseIndex.Core;
 
@@ -30,6 +30,66 @@ public sealed record IndexSettings(
     int EmbeddingSequenceLength,
     bool EmbeddingPreferGpu)
 {
+    private static class HciTomlSerializer
+    {
+        private static readonly TomlSerializerOptions Options = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        };
+
+        public static T? Deserialize<T>(string text) => TomlSerializer.Deserialize<T>(text, Options);
+    }
+
+    private sealed class SettingsTomlRoot
+    {
+        public ScopeToml? Scope { get; set; }
+        public FtsToml? Fts { get; set; }
+        public SemanticToml? Semantic { get; set; }
+    }
+
+    private sealed class ScopeToml
+    {
+        public List<string>? ExtraIncludeRoots { get; set; }
+        public List<string>? ExcludeRoots { get; set; }
+        public List<string>? ExcludePathSegments { get; set; }
+        public List<string>? IgnoreFiles { get; set; }
+    }
+
+    private sealed class FtsToml
+    {
+        public bool? IncludeCsInFts { get; set; }
+        public List<string>? IncludeExtensions { get; set; }
+        public List<string>? ExcludeExtensions { get; set; }
+        public long? MaxIndexedFileBytes { get; set; }
+        public int? ChunkLines { get; set; }
+        public int? ChunkOverlapLines { get; set; }
+        public int? BinaryProbeBytes { get; set; }
+    }
+
+    private sealed class SemanticToml
+    {
+        public bool? Enabled { get; set; }
+        public EmbeddingsToml? Embeddings { get; set; }
+
+        public string? SqliteVecExtensionPath { get; set; }
+        public string? VecExtensionsMode { get; set; }
+        public List<string>? VecExtensions { get; set; }
+        public List<string>? VecAddExtensions { get; set; }
+        public List<string>? VecRemoveExtensions { get; set; }
+    }
+
+    private sealed class EmbeddingsToml
+    {
+        public string? Provider { get; set; }
+        public string? Model { get; set; }
+        public int? Dim { get; set; }
+        public string? ModelPath { get; set; }
+        public string? VocabPath { get; set; }
+        public bool? DoLowerCase { get; set; }
+        public int? SequenceLength { get; set; }
+        public bool? PreferGpu { get; set; }
+    }
+
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
         ExtraIncludeRoots: [],
@@ -92,37 +152,47 @@ public sealed record IndexSettings(
         else if (embeddedModel is not null)
             settingsSource = "embedded";
 
-        // Merge: embedded = base, disk = overlay.
-        // New format: sectioned tables (recommended). Old format: flat keys (back-compat).
-        var includeCs = ReadBool(diskModel, embeddedModel, "fts", "include_cs_in_fts") ?? ReadBool(diskModel, embeddedModel, "include_cs_in_fts") ?? Default.IncludeCsInFts;
-        var extraRoots = ReadStringArray(diskModel, embeddedModel, "scope", "extra_include_roots") ?? ReadStringArray(diskModel, embeddedModel, "extra_include_roots") ?? [];
-        var excludeRoots = ReadStringArray(diskModel, embeddedModel, "scope", "exclude_roots") ?? ReadStringArray(diskModel, embeddedModel, "exclude_roots") ?? [];
-        var includeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "fts", "include_extensions") ?? ReadStringArray(diskModel, embeddedModel, "include_extensions"));
-        var excludeExt = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "fts", "exclude_extensions") ?? ReadStringArray(diskModel, embeddedModel, "exclude_extensions"));
-        var excludeSegments = ReadStringArray(diskModel, embeddedModel, "scope", "exclude_path_segments") ?? ReadStringArray(diskModel, embeddedModel, "exclude_path_segments") ?? [];
-        var ignoreFiles = ReadStringArray(diskModel, embeddedModel, "scope", "ignore_files") ?? ReadStringArray(diskModel, embeddedModel, "ignore_files") ?? [];
+        var merged = MergeModels(baseModel: embeddedModel, overlay: diskModel) ?? new SettingsTomlRoot();
 
-        var maxBytes = ReadLong(diskModel, embeddedModel, "fts", "max_indexed_file_bytes") ?? ReadLong(diskModel, embeddedModel, "max_indexed_file_bytes") ?? 0;
-        var chunkLines = ReadInt(diskModel, embeddedModel, "fts", "chunk_lines") ?? ReadInt(diskModel, embeddedModel, "chunk_lines") ?? 0;
-        var overlapLines = ReadInt(diskModel, embeddedModel, "fts", "chunk_overlap_lines") ?? ReadInt(diskModel, embeddedModel, "chunk_overlap_lines") ?? 0;
-        var probeBytes = ReadInt(diskModel, embeddedModel, "fts", "binary_probe_bytes") ?? ReadInt(diskModel, embeddedModel, "binary_probe_bytes") ?? 0;
+        settings = FromMergedToml(merged);
+        return true;
+    }
 
-        var semanticEnabled = ReadBool(diskModel, embeddedModel, "semantic", "enabled") ?? ReadBool(diskModel, embeddedModel, "semantic_enabled") ?? Default.SemanticEnabled;
-        var embeddingProvider = ReadString(diskModel, embeddedModel, "semantic", "embedding_provider") ?? ReadString(diskModel, embeddedModel, "embedding_provider") ?? Default.EmbeddingProvider;
-        var embeddingModel = ReadString(diskModel, embeddedModel, "semantic", "embedding_model") ?? ReadString(diskModel, embeddedModel, "embedding_model") ?? Default.EmbeddingModel;
-        var embeddingDim = ReadInt(diskModel, embeddedModel, "semantic", "embedding_dim") ?? ReadInt(diskModel, embeddedModel, "embedding_dim") ?? Default.EmbeddingDim;
-        var embeddingModelPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_model_path") ?? ReadString(diskModel, embeddedModel, "embedding_model_path") ?? Default.EmbeddingModelPath;
-        var embeddingVocabPath = ReadString(diskModel, embeddedModel, "semantic", "embedding_vocab_path") ?? ReadString(diskModel, embeddedModel, "embedding_vocab_path") ?? Default.EmbeddingVocabPath;
-        var embeddingDoLowerCase = ReadBool(diskModel, embeddedModel, "semantic", "embedding_do_lower_case") ?? ReadBool(diskModel, embeddedModel, "embedding_do_lower_case") ?? Default.EmbeddingDoLowerCase;
-        var vecExtensionsMode = ReadString(diskModel, embeddedModel, "semantic", "vec_extensions_mode") ?? Default.VecExtensionsMode;
-        var vecExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_extensions"));
-        var vecAddExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_add_extensions"));
-        var vecRemoveExtensions = NormalizeExtensions(ReadStringArray(diskModel, embeddedModel, "semantic", "vec_remove_extensions"));
-        var sqliteVecExtensionPath = ReadString(diskModel, embeddedModel, "semantic", "sqlite_vec_extension_path") ?? ReadString(diskModel, embeddedModel, "sqlite_vec_extension_path") ?? Default.SqliteVecExtensionPath;
-        var embeddingSeqLen = ReadInt(diskModel, embeddedModel, "semantic", "embedding_sequence_length") ?? ReadInt(diskModel, embeddedModel, "embedding_sequence_length") ?? Default.EmbeddingSequenceLength;
-        var embeddingPreferGpu = ReadBool(diskModel, embeddedModel, "semantic", "embedding_prefer_gpu") ?? ReadBool(diskModel, embeddedModel, "embedding_prefer_gpu") ?? Default.EmbeddingPreferGpu;
+    private static IndexSettings FromMergedToml(SettingsTomlRoot merged)
+    {
+        var includeCs = merged.Fts?.IncludeCsInFts ?? Default.IncludeCsInFts;
 
-        settings = new IndexSettings(
+        var extraRoots = merged.Scope?.ExtraIncludeRoots ?? [];
+        var excludeRoots = merged.Scope?.ExcludeRoots ?? [];
+        var excludeSegments = merged.Scope?.ExcludePathSegments ?? [];
+        var ignoreFiles = merged.Scope?.IgnoreFiles ?? [];
+
+        var includeExt = NormalizeExtensions(merged.Fts?.IncludeExtensions);
+        var excludeExt = NormalizeExtensions(merged.Fts?.ExcludeExtensions);
+
+        var maxBytes = merged.Fts?.MaxIndexedFileBytes ?? Default.MaxIndexedFileBytes;
+        var chunkLines = merged.Fts?.ChunkLines ?? Default.ChunkLines;
+        var overlapLines = merged.Fts?.ChunkOverlapLines ?? Default.ChunkOverlapLines;
+        var probeBytes = merged.Fts?.BinaryProbeBytes ?? Default.BinaryProbeBytes;
+
+        var semanticEnabled = merged.Semantic?.Enabled ?? Default.SemanticEnabled;
+        var embeddings = merged.Semantic?.Embeddings;
+        var embeddingProvider = embeddings?.Provider ?? Default.EmbeddingProvider;
+        var embeddingModel = embeddings?.Model ?? Default.EmbeddingModel;
+        var embeddingDim = embeddings?.Dim ?? Default.EmbeddingDim;
+        var embeddingModelPath = embeddings?.ModelPath ?? Default.EmbeddingModelPath;
+        var embeddingVocabPath = embeddings?.VocabPath ?? Default.EmbeddingVocabPath;
+        var embeddingDoLowerCase = embeddings?.DoLowerCase ?? Default.EmbeddingDoLowerCase;
+        var embeddingSeqLen = embeddings?.SequenceLength ?? Default.EmbeddingSequenceLength;
+        var embeddingPreferGpu = embeddings?.PreferGpu ?? Default.EmbeddingPreferGpu;
+
+        var vecExtensionsMode = merged.Semantic?.VecExtensionsMode ?? Default.VecExtensionsMode;
+        var vecExtensions = NormalizeExtensions(merged.Semantic?.VecExtensions);
+        var vecAddExtensions = NormalizeExtensions(merged.Semantic?.VecAddExtensions);
+        var vecRemoveExtensions = NormalizeExtensions(merged.Semantic?.VecRemoveExtensions);
+        var sqliteVecExtensionPath = merged.Semantic?.SqliteVecExtensionPath ?? Default.SqliteVecExtensionPath;
+
+        return new IndexSettings(
             includeCs,
             extraRoots,
             excludeRoots,
@@ -148,7 +218,6 @@ public sealed record IndexSettings(
             sqliteVecExtensionPath,
             embeddingSeqLen,
             embeddingPreferGpu);
-        return true;
     }
 
     public long GetEffectiveMaxIndexedFileBytes()
@@ -223,14 +292,14 @@ public sealed record IndexSettings(
         return set;
     }
 
-    private static TomlTable? TryReadEmbeddedModel(out string? error)
+    private static SettingsTomlRoot? TryReadEmbeddedModel(out string? error)
     {
         error = null;
         try
         {
             if (!BundledContent.TryReadEmbeddedText("DefaultSettings/settings.default.toml", out var embedded))
                 return null;
-            return TomlSerializer.Deserialize<TomlTable>(embedded);
+            return HciTomlSerializer.Deserialize<SettingsTomlRoot>(embedded);
         }
         catch (Exception ex)
         {
@@ -239,13 +308,13 @@ public sealed record IndexSettings(
         }
     }
 
-    private static TomlTable? TryReadDiskModel(string path, out string? error)
+    private static SettingsTomlRoot? TryReadDiskModel(string path, out string? error)
     {
         error = null;
         try
         {
             var text = File.ReadAllText(path);
-            return TomlSerializer.Deserialize<TomlTable>(text);
+            return HciTomlSerializer.Deserialize<SettingsTomlRoot>(text);
         }
         catch (Exception ex)
         {
@@ -253,78 +322,6 @@ public sealed record IndexSettings(
             return null;
         }
     }
-
-    private static bool? ReadBool(TomlTable? overlay, TomlTable? baseModel, string key)
-    {
-        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is bool b)
-            return b;
-        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is bool bb)
-            return bb;
-        return null;
-    }
-
-    private static bool? ReadBool(TomlTable? overlay, TomlTable? baseModel, string section, string key)
-        => ReadBool(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
-
-    private static int? ReadInt(TomlTable? overlay, TomlTable? baseModel, string key)
-    {
-        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
-            return l is >= int.MinValue and <= int.MaxValue ? (int)l : null;
-        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is long ll)
-            return ll is >= int.MinValue and <= int.MaxValue ? (int)ll : null;
-        return null;
-    }
-
-    private static int? ReadInt(TomlTable? overlay, TomlTable? baseModel, string section, string key)
-        => ReadInt(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
-
-    private static long? ReadLong(TomlTable? overlay, TomlTable? baseModel, string key)
-    {
-        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is long l)
-            return l;
-        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is long ll)
-            return ll;
-        return null;
-    }
-
-    private static long? ReadLong(TomlTable? overlay, TomlTable? baseModel, string section, string key)
-        => ReadLong(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
-
-    private static List<string>? ReadStringArray(TomlTable? overlay, TomlTable? baseModel, string key)
-    {
-        TomlArray? arr = null;
-        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is TomlArray a)
-            arr = a;
-        else if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is TomlArray aa)
-            arr = aa;
-        if (arr is null)
-            return null;
-        var list = new List<string>(arr.Count);
-        foreach (var it in arr)
-        {
-            if (it is string s && !string.IsNullOrWhiteSpace(s))
-                list.Add(s.Trim());
-        }
-        return list;
-    }
-
-    private static List<string>? ReadStringArray(TomlTable? overlay, TomlTable? baseModel, string section, string key)
-        => ReadStringArray(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
-
-    private static string? ReadString(TomlTable? overlay, TomlTable? baseModel, string key)
-    {
-        if (overlay is not null && overlay.TryGetValue(key, out var v) && v is string s)
-            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-        if (baseModel is not null && baseModel.TryGetValue(key, out v) && v is string ss)
-            return string.IsNullOrWhiteSpace(ss) ? null : ss.Trim();
-        return null;
-    }
-
-    private static string? ReadString(TomlTable? overlay, TomlTable? baseModel, string section, string key)
-        => ReadString(TryGetTable(overlay, section), TryGetTable(baseModel, section), key);
-
-    private static TomlTable? TryGetTable(TomlTable? root, string key)
-        => root is not null && root.TryGetValue(key, out var v) && v is TomlTable t ? t : null;
 
     private static List<string>? NormalizeExtensions(List<string>? raw)
     {
@@ -342,6 +339,93 @@ public sealed record IndexSettings(
             list.Add(s.ToLowerInvariant());
         }
         return list;
+    }
+
+    private static SettingsTomlRoot? MergeModels(SettingsTomlRoot? baseModel, SettingsTomlRoot? overlay)
+    {
+        if (baseModel is null && overlay is null)
+            return null;
+        if (baseModel is null)
+            return overlay;
+        if (overlay is null)
+            return baseModel;
+
+        return new SettingsTomlRoot
+        {
+            Scope = MergeScope(baseModel.Scope, overlay.Scope),
+            Fts = MergeFts(baseModel.Fts, overlay.Fts),
+            Semantic = MergeSemantic(baseModel.Semantic, overlay.Semantic),
+        };
+    }
+
+    private static ScopeToml? MergeScope(ScopeToml? a, ScopeToml? b)
+    {
+        if (a is null && b is null)
+            return null;
+        a ??= new ScopeToml();
+        b ??= new ScopeToml();
+        return new ScopeToml
+        {
+            ExtraIncludeRoots = b.ExtraIncludeRoots ?? a.ExtraIncludeRoots,
+            ExcludeRoots = b.ExcludeRoots ?? a.ExcludeRoots,
+            ExcludePathSegments = b.ExcludePathSegments ?? a.ExcludePathSegments,
+            IgnoreFiles = b.IgnoreFiles ?? a.IgnoreFiles,
+        };
+    }
+
+    private static FtsToml? MergeFts(FtsToml? a, FtsToml? b)
+    {
+        if (a is null && b is null)
+            return null;
+        a ??= new FtsToml();
+        b ??= new FtsToml();
+        return new FtsToml
+        {
+            IncludeCsInFts = b.IncludeCsInFts ?? a.IncludeCsInFts,
+            IncludeExtensions = b.IncludeExtensions ?? a.IncludeExtensions,
+            ExcludeExtensions = b.ExcludeExtensions ?? a.ExcludeExtensions,
+            MaxIndexedFileBytes = b.MaxIndexedFileBytes ?? a.MaxIndexedFileBytes,
+            ChunkLines = b.ChunkLines ?? a.ChunkLines,
+            ChunkOverlapLines = b.ChunkOverlapLines ?? a.ChunkOverlapLines,
+            BinaryProbeBytes = b.BinaryProbeBytes ?? a.BinaryProbeBytes,
+        };
+    }
+
+    private static SemanticToml? MergeSemantic(SemanticToml? a, SemanticToml? b)
+    {
+        if (a is null && b is null)
+            return null;
+        a ??= new SemanticToml();
+        b ??= new SemanticToml();
+        return new SemanticToml
+        {
+            Enabled = b.Enabled ?? a.Enabled,
+            Embeddings = MergeEmbeddings(a.Embeddings, b.Embeddings),
+            SqliteVecExtensionPath = b.SqliteVecExtensionPath ?? a.SqliteVecExtensionPath,
+            VecExtensionsMode = b.VecExtensionsMode ?? a.VecExtensionsMode,
+            VecExtensions = b.VecExtensions ?? a.VecExtensions,
+            VecAddExtensions = b.VecAddExtensions ?? a.VecAddExtensions,
+            VecRemoveExtensions = b.VecRemoveExtensions ?? a.VecRemoveExtensions,
+        };
+    }
+
+    private static EmbeddingsToml? MergeEmbeddings(EmbeddingsToml? a, EmbeddingsToml? b)
+    {
+        if (a is null && b is null)
+            return null;
+        a ??= new EmbeddingsToml();
+        b ??= new EmbeddingsToml();
+        return new EmbeddingsToml
+        {
+            Provider = b.Provider ?? a.Provider,
+            Model = b.Model ?? a.Model,
+            Dim = b.Dim ?? a.Dim,
+            ModelPath = b.ModelPath ?? a.ModelPath,
+            VocabPath = b.VocabPath ?? a.VocabPath,
+            DoLowerCase = b.DoLowerCase ?? a.DoLowerCase,
+            SequenceLength = b.SequenceLength ?? a.SequenceLength,
+            PreferGpu = b.PreferGpu ?? a.PreferGpu,
+        };
     }
 }
 

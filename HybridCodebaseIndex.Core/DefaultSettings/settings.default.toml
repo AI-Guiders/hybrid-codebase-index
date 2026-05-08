@@ -46,23 +46,25 @@ binary_probe_bytes = 8192
 # Semantic / vec (opt-in)
 enabled = false
 
+# Embeddings settings: prefer nested table for clarity.
+[semantic.embeddings]
 # Provider id (v0: "dummy"; also supported: "onnx")
-embedding_provider = "dummy"
+provider = "dummy"
 
 # Provider/model-specific name (optional; ignored by dummy).
-embedding_model = ""
+model = ""
 
 # Explicit dimension; 0 = provider default.
-embedding_dim = 0
+dim = 0
 
 # ONNX provider: path to the ONNX model file (relative to index dir or absolute).
-embedding_model_path = ""
+model_path = ""
 
 # ONNX provider: WordPiece vocab file (relative to index dir or absolute), usually vocab.txt.
-embedding_vocab_path = ""
+vocab_path = ""
 
 # ONNX provider: whether to lowercase in BasicTokenizer step.
-embedding_do_lower_case = true
+do_lower_case = true
 
 # sqlite-vec: optional loadable extension path (absolute, or relative to index dir, then to MCP app dir).
 # Default vec0.dll is copied next to HybridCodebaseIndex.Mcp on Windows builds when native/win-x64/vec0.dll is present.
@@ -80,8 +82,8 @@ vec_add_extensions = []
 vec_remove_extensions = []
 
 # For token-based models: sequence length (0 = provider default, typically 128..256).
-embedding_sequence_length = 0
+sequence_length = 0
 
 # Prefer GPU if available (ONNX Runtime CUDA EP).
-embedding_prefer_gpu = true
+prefer_gpu = true
 
