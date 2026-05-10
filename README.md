@@ -5,7 +5,7 @@ Local hybrid index for “search-before-read” workflows. Формальное 
 ## What you get
 
 - **MCP server**: `HybridCodebaseIndex.Mcp` (stdio)
-- **Index core**: `HybridCodebaseIndex.Core` (SQLite FTS5)
+- **Index core**: NuGet **[AIGuiders.HybridCodebaseIndex.Core](https://www.nuget.org/packages/AIGuiders.HybridCodebaseIndex.Core)** (исходники — [hybrid-codebase-index-core](https://github.com/KarataevDmitry/hybrid-codebase-index-core); SQLite FTS5)
 - **Tools**:
   - `codebase_index_version`
   - `codebase_index_status`
@@ -49,8 +49,8 @@ Then add to Cursor MCP config (`mcp.json`):
 Per-workspace override file:
 - `<workspace>/.hybrid-codebase-index/settings.toml`
 
-Default settings are embedded into the MCP binary:
-- `HybridCodebaseIndex.Core/DefaultSettings/settings.default.toml`
+Default settings are embedded into the **Core** assembly (packaged in the dependency):
+- в репозитории ядра: `DefaultSettings/settings.default.toml` в [hybrid-codebase-index-core](https://github.com/KarataevDmitry/hybrid-codebase-index-core)
 
 ### Supported keys (snake_case)
 
