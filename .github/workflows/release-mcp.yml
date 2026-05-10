@@ -1,4 +1,4 @@
-# MCP-EXE (HybridCodebaseIndex.Core в этом же репо).
+# MCP-EXE; HybridCodebaseIndex.Core с NuGet (AIGuiders.HybridCodebaseIndex.Core).
 name: Release MCP
 
 on:

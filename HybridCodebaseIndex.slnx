@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="HybridCodebaseIndex.Core\HybridCodebaseIndex.Core.csproj" />
   <Project Path="HybridCodebaseIndex.Mcp\HybridCodebaseIndex.Mcp.csproj" />
   <Project Path="HybridCodebaseIndex.Core.Tests\HybridCodebaseIndex.Core.Tests.csproj" />
 </Solution>

@@ -31,11 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AIGuiders.HybridCodebaseIndex.Core" Version="0.1.0" />
     <PackageReference Include="ModelContextProtocol" Version="0.8.0-preview.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\HybridCodebaseIndex.Core\HybridCodebaseIndex.Core.csproj" />
   </ItemGroup>
 
   <!-- sqlite-vec loadable extension (Windows x64). Omitted on machines where the file is not present (e.g. Linux CI). -->
