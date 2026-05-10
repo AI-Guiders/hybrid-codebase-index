@@ -90,6 +90,16 @@ public sealed record IndexSettings(
         public bool? PreferGpu { get; set; }
     }
 
+    /// <summary>
+    /// Если merge настроек не дал ни одного расширения, используем тот же состав, что во встроенном
+    /// <c>DefaultSettings/settings.default.toml</c> (без дублирования комментариев в коде — только список).
+    /// </summary>
+    private static readonly string[] FallbackIndexedExtensions =
+    [
+        ".md", ".mdx", ".csproj", ".slnx", ".props", ".targets", ".toml", ".editorconfig", ".json", ".yml",
+        ".yaml", ".razor", ".css", ".scss", ".html", ".axaml", ".cs",
+    ];
+
     public static IndexSettings Default { get; } = new(
         IncludeCsInFts: true,
         ExtraIncludeRoots: [],
@@ -241,9 +251,9 @@ public sealed record IndexSettings(
         }
         else
         {
-            // Embedded TOML is the canonical source of defaults; if it failed to load,
-            // we prefer an explicit empty set instead of silently indexing an implicit list.
-            baseList = [];
+            // Пустой/null после merge: см. MergeFts — overlay `include_extensions = []` не затирает базу.
+            // Если база тоже недоступна (редкий сбой embedded), не оставляем индекс без расширений.
+            baseList = FallbackIndexedExtensions;
         }
 
         IEnumerable<string> filtered = baseList;
@@ -382,7 +392,8 @@ public sealed record IndexSettings(
         return new FtsToml
         {
             IncludeCsInFts = b.IncludeCsInFts ?? a.IncludeCsInFts,
-            IncludeExtensions = b.IncludeExtensions ?? a.IncludeExtensions,
+            // Пустой массив в overlay не должен затирать встроенный список (иначе индексируется 0 файлов).
+            IncludeExtensions = b.IncludeExtensions is { Count: > 0 } ? b.IncludeExtensions : a.IncludeExtensions,
             ExcludeExtensions = b.ExcludeExtensions ?? a.ExcludeExtensions,
             MaxIndexedFileBytes = b.MaxIndexedFileBytes ?? a.MaxIndexedFileBytes,
             ChunkLines = b.ChunkLines ?? a.ChunkLines,

@@ -44,17 +44,11 @@ binary_probe_bytes = 8192
 
 [semantic]
 # Semantic / vec (opt-in)
-enabled = false
-
-# Embeddings settings: prefer nested table for clarity.
+enabled = false# Embeddings settings: prefer nested table for clarity.
 [semantic.embeddings]
 # Provider id (v0: "dummy"; also supported: "onnx")
-provider = "dummy"
-
-# Provider/model-specific name (optional; ignored by dummy).
-model = ""
-
-# Explicit dimension; 0 = provider default.
+provider = "dummy"# Provider/model-specific name (optional; ignored by dummy).
+model = ""# Explicit dimension; 0 = provider default.
 dim = 0
 
 # ONNX provider: path to the ONNX model file (relative to index dir or absolute).
@@ -86,4 +80,3 @@ sequence_length = 0
 
 # Prefer GPU if available (ONNX Runtime CUDA EP).
 prefer_gpu = true
-

@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -31,7 +30,7 @@ internal sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
         {
             try
             {
-                // Requires Microsoft.ML.OnnxRuntime.Gpu + CUDA runtime present.
+                // Optional: CUDA EP needs matching native runtime (GPU package / machine); otherwise catch → CPU.
                 opts.AppendExecutionProvider_CUDA(0);
             }
             catch
