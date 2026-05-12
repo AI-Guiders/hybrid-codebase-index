@@ -2,6 +2,8 @@
 
 Local hybrid index for “search-before-read” workflows. Формальное решение **ADR 0105** — в репозитории **CascadeIDE**: [0105](https://github.com/KarataevDmitry/cascade-ide/blob/main/docs/adr/0105-hybrid-codebase-index-for-csharp-web.md); краткое обоснование без ADR-серии здесь — **[design-rationale.md](docs/design-rationale.md)**. Keyword-поиск (SQLite FTS5) по docs/config/web/axaml и опционально `*.cs` как текст; **семантическая корректность по C# — в Roslyn** (rename/usages/diagnostics).
 
+**Cursor:** примеры правил для копипаста и ссылки на соседние репо — **[docs/cursor-rules-examples.md](docs/cursor-rules-examples.md)**.
+
 ## What you get
 
 - **MCP server**: `HybridCodebaseIndex.Mcp` (stdio)
