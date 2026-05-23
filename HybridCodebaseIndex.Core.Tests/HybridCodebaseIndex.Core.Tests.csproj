@@ -19,7 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AIGuiders.HybridCodebaseIndex.Core" Version="0.1.1" />
+    <ProjectReference Include="..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj" Condition="Exists('..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj')" />
+    <PackageReference Include="AIGuiders.HybridCodebaseIndex.Core" Version="0.1.2" Condition="!Exists('..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj')" />
   </ItemGroup>
 
 </Project>
