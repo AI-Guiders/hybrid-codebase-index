@@ -8,13 +8,17 @@
 >
 > Тексты совпадают с полем `description` у инструментов MCP; полная схема — в `inputSchema`.
 
+### `man`
+
+MCP ops manual for a tool (not shell man). Pass tool=<name> (e.g. codebase_index_search); omit tool for TOC. Use on empty hits / first contact / unclear procedure — ListTools is capabilities only.
+
 ### `codebase_index_version`
 
 Версия MCP сервера: assembly version + informational version (commit), runtime.
 
 ### `codebase_index_search`
 
-Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать.
+Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать. Empty hits ≠ auto-reindex — call man tool=codebase_index_search.
 
 ### `codebase_index_explain`
 

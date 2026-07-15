@@ -4,12 +4,16 @@
   "title": "Hybrid Codebase Index MCP",
   "tools": [
     {
+      "name": "man",
+      "description": "MCP ops manual for a tool (not shell man). Pass tool=<name> (e.g. codebase_index_search); omit tool for TOC. Use on empty hits / first contact / unclear procedure — ListTools is capabilities only."
+    },
+    {
       "name": "codebase_index_version",
       "description": "Версия MCP сервера: assembly version + informational version (commit), runtime."
     },
     {
       "name": "codebase_index_search",
-      "description": "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать."
+      "description": "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать. Empty hits ≠ auto-reindex — call man tool=codebase_index_search."
     },
     {
       "name": "codebase_index_explain",

@@ -16,6 +16,25 @@ internal static class ToolCatalog
         [
             new Tool
             {
+                Name = "man",
+                Description =
+                    "MCP ops manual for a tool (not shell man). Pass tool=<name> (e.g. codebase_index_search); omit tool for TOC. Use on empty hits / first contact / unclear procedure — ListTools is capabilities only.",
+                InputSchema = Schema(new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        tool = new
+                        {
+                            type = "string",
+                            description =
+                                "Tool name to document (e.g. codebase_index_search). Omit or empty for table of contents.",
+                        },
+                    },
+                }),
+            },
+            new Tool
+            {
                 Name = "codebase_index_version",
                 Description = "Версия MCP сервера: assembly version + informational version (commit), runtime.",
                 InputSchema = Schema(new
@@ -28,7 +47,7 @@ internal static class ToolCatalog
             {
                 Name = "codebase_index_search",
                 Description =
-                    "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать.",
+                    "Гибридный полнотекстовый поиск по индексу workspace (SQLite FTS5; архитектурное решение — ADR 0105 в CascadeIDE: docs/adr/0105-hybrid-codebase-index-for-csharp-web.md). hit_kind=text_fts. До reindex база может отсутствовать. Empty hits ≠ auto-reindex — call man tool=codebase_index_search.",
                 InputSchema = Schema(new
                 {
                     type = "object",

@@ -10,6 +10,8 @@ var options = new McpServerOptions
 {
     ServerInfo = new Implementation { Name = "HybridCodebaseIndex.Mcp", Version = "0.1.0" },
     ProtocolVersion = "2024-11-05",
+    ServerInstructions =
+        "Ops: call man tool=<name> (or man with no args for TOC). Empty codebase_index_search ≠ auto-reindex — status first, then reindex once or Grep/Glob. man is MCP ops manual, not shell.",
     Capabilities = new ServerCapabilities { Tools = new ToolsCapability { ListChanged = false } },
     Handlers = new McpServerHandlers
     {

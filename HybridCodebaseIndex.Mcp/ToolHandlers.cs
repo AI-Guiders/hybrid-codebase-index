@@ -30,6 +30,7 @@ internal static class ToolHandlers
         args ??= FrozenDictionary<string, JsonElement>.Empty;
         return name switch
         {
+            "man" => HandleMan(args),
             "codebase_index_version" => HandleVersion(),
             "codebase_index_search" => HandleSearch(args),
             "codebase_index_explain" => HandleExplain(args),
@@ -42,6 +43,9 @@ internal static class ToolHandlers
             _ => throw new ArgumentException($"Unknown tool: {name}", nameof(name)),
         };
     }
+
+    private static string HandleMan(IReadOnlyDictionary<string, JsonElement> args)
+        => ManPages.Resolve(OptionalString(args, "tool"));
 
     private static string HandleVersion()
     {
@@ -82,14 +86,37 @@ internal static class ToolHandlers
         var vecTopK = OptionalInt(args, "vec_top_k") ?? 30;
 
         var (response, err) = Service.SearchHybridAsync(ws, sln, q, topN, pathPrefix, excludePrefixes, extensions, semantic, alpha, beta, vecTopK).GetAwaiter().GetResult();
+        var hits = response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso)).ToList();
+
+        // Always classify empty hitlists — even when Core already set err.
+        // Agent branch: hits==[] → read missKind (err is human/debug detail).
+        string? missKind = null;
+        string? suggestedNext = null;
+        if (hits.Count == 0)
+            (missKind, suggestedNext) = ClassifyEmptySearch(ws, sln);
+
         var dto = new SearchResultDto(
             Err: err,
             IndexFormatVersion: response.IndexFormatVersion,
             Query: response.Query,
             DatabasePath: response.DatabasePath,
-            Hits: response.Hits.Select(static h => new HitDto(h.HitId, h.Path, h.Extension, h.HitKind, h.RankScore, h.FtsScore, h.VecScore, h.Snippet, h.LineStart, h.LineEnd, h.ChunkCharCount, h.LastWriteUtcIso)).ToList());
+            Hits: hits,
+            MissKind: missKind,
+            SuggestedNext: suggestedNext);
 
         return JsonSerializer.Serialize(dto, JsonOut);
+    }
+
+    private static (string MissKind, string SuggestedNext) ClassifyEmptySearch(string workspacePath, string? solutionPath)
+    {
+        var st = Service.GetStatusAsync(workspacePath, solutionPath).GetAwaiter().GetResult();
+        if (!st.DatabaseExists)
+            return ("index_missing", "codebase_index_reindex");
+        if (st.DocumentCount <= 0)
+            return ("index_empty", "codebase_index_reindex");
+        if (!string.IsNullOrEmpty(st.LastReindexError))
+            return ("index_error", "codebase_index_status");
+        return ("query_miss", "relax_filters_or_grep");
     }
 
     private static string HandleExplain(IReadOnlyDictionary<string, JsonElement> args)
@@ -409,7 +436,9 @@ internal static class ToolHandlers
         int IndexFormatVersion,
         string Query,
         string DatabasePath,
-        List<HitDto> Hits);
+        List<HitDto> Hits,
+        string? MissKind = null,
+        string? SuggestedNext = null);
 
     private sealed record HitDto(
         long HitId,
