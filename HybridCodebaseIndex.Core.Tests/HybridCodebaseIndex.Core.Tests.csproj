@@ -19,8 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj" Condition="Exists('..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj')" />
-    <PackageReference Include="AIGuiders.HybridCodebaseIndex.Core" Version="0.1.2" Condition="!Exists('..\..\hybrid-codebase-index-core\HybridCodebaseIndex.Core.csproj')" />
+    <ProjectReference Include="$(GuidersCoreRoot)\src\HybridCodebaseIndex.Core\HybridCodebaseIndex.Core.csproj" Condition="Exists('$(GuidersCoreRoot)\src\HybridCodebaseIndex.Core\HybridCodebaseIndex.Core.csproj')" />
+    <PackageReference Include="AIGuiders.HybridCodebaseIndex.Core" Version="0.1.2" Condition="!Exists('$(GuidersCoreRoot)\src\HybridCodebaseIndex.Core\HybridCodebaseIndex.Core.csproj')" />
   </ItemGroup>
 
 </Project>
