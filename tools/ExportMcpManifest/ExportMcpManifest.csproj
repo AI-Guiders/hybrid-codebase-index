@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\HybridCodebaseIndex.Mcp\HybridCodebaseIndex.Mcp.csproj" />
-    <ProjectReference Include="..\..\..\tools\McpToolManifest\McpToolManifest.csproj" />
+    <ProjectReference Include="..\..\..\mcp-tool-manifest\McpToolManifest.csproj" />
   </ItemGroup>
 
 </Project>
